@@ -17,6 +17,7 @@
     --font-body:'Inter', sans-serif;
     --font-mono:'IBM Plex Mono', monospace;
     --section-pad: 9rem;
+    --accent:#00D4FF;
   }
 
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -195,9 +196,9 @@
     border:1px solid rgba(255,255,255,0.16);
     background:rgba(8,18,34,0.34);
     backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-    transition:color .25s ease, border-color .25s ease, transform .25s ease;
+    transition:color .25s ease, border-color .25s ease, background .25s ease, transform .25s ease;
   }
-  .tag-pill:hover{color:var(--accent);border-color:color-mix(in srgb, var(--accent) 65%, transparent);transform:translateY(-2px);}
+  .tag-pill:hover{color:var(--tag-pill-hover-color, var(--accent));background:rgba(255,255,255,0.08);border-color:color-mix(in srgb, var(--tag-pill-hover-color, var(--accent)) 65%, transparent);transform:translateY(-2px);}
   .slide-cta{display:inline-flex;align-items:center;gap:0.6rem;padding:0.95rem 1.8rem;font-weight:600;font-size:0.95rem;border-radius:2px;background:var(--accent);color:var(--navy-950);transition:transform .2s, filter .2s;}
   .slide-cta:hover{transform:translateY(-2px);filter:brightness(1.08);}
 

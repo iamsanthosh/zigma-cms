@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { visibleItems } from '@/lib/repeater';
 
-export default function Hero({ data }) {
+export default function Hero({ data, backgroundStyle }) {
   const slides = visibleItems(data.slides);
   const [current, setCurrent] = useState(0);
 
@@ -16,10 +16,16 @@ export default function Hero({ data }) {
 
   if (!slides.length) return null;
 
+  const themeClass = backgroundStyle ? `theme-${backgroundStyle}` : '';
+
   return (
-    <section className="hero-slider" id="home">
+    <section className={`hero-slider ${themeClass}`} id="home">
       {slides.map((slide, i) => (
-        <div className={`slide${i === current ? ' active' : ''}`} key={i}>
+        <div 
+          className={`slide${i === current ? ' active' : ''}`} 
+          key={i}
+          style={slide.tagPillColor ? { '--tag-pill-hover-color': slide.tagPillColor } : {}}
+        >
           <div className="slide-bg">
             {slide.backgroundImage?.url && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -42,11 +48,11 @@ export default function Hero({ data }) {
 
           <div className="container">
             <div className="slide-content">
-              {slide.eyebrow && <div className="eyebrow">{slide.eyebrow}</div>}
+              {slide.eyebrow && <div className="eyebrow" style={slide.tagPillColor ? { color: slide.tagPillColor } : {}}>{slide.eyebrow}</div>}
               {slide.headline && <h1>{slide.headline}</h1>}
               {slide.lead && <p className="lead">{slide.lead}</p>}
               {slide.ctaLabel && (
-                <a href={slide.ctaUrl || '#'} className="slide-cta">
+                <a href={slide.ctaUrl || '#'} className="slide-cta" style={slide.tagPillColor ? { backgroundColor: slide.tagPillColor } : {}}>
                   {slide.ctaLabel} →
                 </a>
               )}

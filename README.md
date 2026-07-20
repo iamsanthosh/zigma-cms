@@ -1,396 +1,436 @@
-# Zigma Website Builder — CMS + Public Site
+# Zigma Website Builder
 
-A configuration-driven website builder for the Zigma Technologies template:
-a Next.js public site that renders entirely from database content, and a
-matching admin CMS to manage every page, section, menu, product, service,
-media asset, and site-wide setting without touching code.
+A configuration-driven website builder for Zigma Technologies template. Features a Next.js public site that renders entirely from database content, and a matching admin CMS to manage pages, sections, menus, products, services, media assets, and site-wide settings without touching code.
 
-> **Status: generated and internally verified, not yet run against a live
-> environment.** Every `.js`/`.jsx` file in this repo has been checked with
-> a real JSX-aware syntax parser (esbuild) and passes clean; `schema.sql` is
-> brace-balanced; every JSON config file is valid JSON. What has **not**
-> happened in this environment: `npm install` (no package registry access
-> here), a live `next build`, or a connection to a real MySQL instance. Budget
-> a first-run debugging session — Section 8 below is a checklist for exactly
-> that.
+## Table of Contents
 
----
-
-## Table of contents
-
-0. [What changed in the last review pass](#0-what-changed-in-the-last-review-pass)
-1. [Architecture overview](#1-architecture-overview)
-2. [Data model](#2-data-model)
-3. [Admin panel structure](#3-admin-panel-structure)
-4. [Products/Services modal flow](#4-productsservices-modal-flow)
-5. [Repository layout](#5-repository-layout)
-6. [Local setup, step by step](#6-local-setup-step-by-step)
-7. [Environment variables reference](#7-environment-variables-reference)
-8. [First-run checklist / known risk areas](#8-first-run-checklist--known-risk-areas)
-9. [Deploying to Hostinger, step by step](#9-deploying-to-hostinger-step-by-step)
-10. [Day-to-day admin workflows](#10-day-to-day-admin-workflows)
-11. [Extending the system](#11-extending-the-system)
-12. [Troubleshooting](#12-troubleshooting)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Folder Structure](#folder-structure)
+- [Local Setup](#local-setup)
+- [Database Setup](#database-setup)
+- [Environment Variables](#environment-variables)
+- [Admin Panel](#admin-panel)
+- [Deployment](#deployment)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## 0. What changed in the last review pass
-
-1. **Seed data rewritten from the real template.** `lib/defaultContent.js` is
-   the single source of truth — every hero slide, stat, why-card, feature,
-   timeline entry, project, industry, and testimonial is copied from the
-   static HTML, not placeholder text.
-2. **`db:migrate` / `db:seed` are Node scripts**, not `mysql` CLI shell-outs
-   — `scripts/migrate.js` and `scripts/seed.js` — so they work identically
-   on Hostinger, CI, or any machine with just Node installed, no `mysql`
-   binary required.
-3. **No stray placeholder folders.** A leftover artifact directory from an
-   earlier build step was found and removed; confirmed zero empty
-   directories remain anywhere in the tree.
-4. **Local dev bypasses login.** When `NODE_ENV !== 'production'`, `/admin`
-   skips the login screen entirely (`lib/auth.js` → `isDevBypassEnabled()`).
-   Hard-disabled in production regardless of any env var, so it can't leak
-   into a real deploy.
-5. **No-DB / no-data fallback.** Every function in `lib/content.js` tries
-   the database first and falls back to `lib/defaultContent.js` if the
-   query throws (DB not configured yet) or returns nothing (page not yet
-   published) — the public site always renders the real template content,
-   never a blank page.
-6. **Real Products & Services pages**, not just a homepage anchor:
-   `/products-services` (listing) and `/products-services/[type]/[slug]`
-   (SEO-friendly detail page per item), alongside the tile-click popup
-   modal the original spec calls for.
-7. **Structural fidelity fixes** found by diffing against the original
-   HTML: the header's `.header-right` was nested inside `<nav>` instead of
-   being a flex sibling (broke the layout the CSS expects); the mega-menu
-   only supported one column per dropdown instead of the template's real
-   multi-column layout; an invented "emergency pill" that never existed in
-   the source template was removed; the why-section, stat bar, split-feature
-   bands, legacy timeline, projects grid, and industries grid were rebuilt
-   to match the template's actual markup and CSS classes.
-8. **Admin gaps closed**: per-item hide/show inside repeaters (slides,
-   bullets, stats, timeline entries...), SEO fields (meta title/description/
-   canonical/OG image), a Reusable Blocks admin screen, and a real gallery
-   manager for product/service popup media.
-
----
-
-## 1. Architecture overview
-
-```
-Next.js (App Router)
-├── Public site   — app/(site)/**           Server Components, ISR (60s)
-├── Admin CMS     — app/admin/**             Client Components + fetch to /api/admin
-├── API layer     — app/api/admin/**         Generic CRUD + a few bespoke routes
-│                   app/api/public/**        Read-only JSON for client components
-├── Data layer    — lib/db.js (mysql2 pool), lib/content.js (fallback-aware reads)
-└── MySQL         — schema.sql               Hostinger managed MySQL
-```
-
-- **Rendering strategy**: every public page is fetched server-side from
-  MySQL (`lib/content.js`) and rendered by `SectionRenderer`, which maps a
-  section's `type` column to a React component. `revalidate = 60` gives you
-  ISR — publish a change and it's live within a minute, no rebuild/deploy
-  needed.
-- **Configuration-driven sections**: a page is just an ordered list of rows
-  in `sections`, each with a `type` and a JSON `data` blob. `lib/sectionSchemas.js`
-  declares the field shape for every type once; the admin's `DynamicForm`
-  component reads that same schema to render the right inputs, including
-  nested repeaters (slides, bullets, stats, milestones, testimonials,
-  industries...) with individual hide/show per item.
-- **No-DB fallback**: `lib/defaultContent.js` mirrors the real template
-  content in one JS module. `lib/content.js` reads the DB first and falls
-  back to this module on any failure or empty result, and `scripts/seed.js`
-  loads the exact same module into MySQL — so the "default" content and the
-  "seeded" content can never drift apart.
-- **Generic CRUD**: `app/api/admin/[resource]/route.js` +
-  `[resource]/[id]/route.js` serve every table in `lib/resources.js` (pages,
-  menus, menu_items, sections, section_items, products, services, media,
-  site_settings, theme_settings, users, inquiries, item_media...) through
-  one code path, with a field whitelist per resource so nothing beyond
-  what's declared can ever be written.
-- **Publish / preview**: `app/api/admin/publish/route.js` snapshots a
-  page's current sections into `publish_versions` (on Publish) or
-  `preview_versions` behind a random token (on Preview), rendered at
-  `/preview/[token]`, so editors can share an unpublished draft link
-  without it affecting the live site.
-
-## 2. Data model
-
-See `schema.sql` for the full DDL. Summary:
-
-| Table | Purpose |
-|---|---|
-| `users` | Admin/editor logins, bcrypt-hashed |
-| `site_settings`, `theme_settings` | Key/value global config + CSS-variable design tokens |
-| `menus`, `menu_items` | Nav + mega-menu columns + footer link columns |
-| `pages` | One row per route; `publish_status`, `visible`, `active`, `order` |
-| `sections`, `section_items` | Ordered content blocks per page (+ repeatable child rows) |
-| `reusable_blocks` | A section's `data` can be sourced from here to reuse one block on many pages |
-| `media_assets`, `item_media` | Media library + per-product/service galleries |
-| `products`, `services` | Tile/modal content, specs, tags, CTAs, SEO |
-| `inquiries` | Contact/quote form submissions |
-| `seo_metadata` | Reusable per-page/per-item SEO fields |
-| `publish_versions`, `preview_versions` | Content snapshots for publish/preview |
-
-## 3. Admin panel structure
-
-`/admin` (protected by `middleware.js`, session cookie is a JWT — see
-Section 6 for the local dev bypass):
-
-- **Dashboard** — content counts at a glance
-- **Pages** — list, create, delete, hide/show → **Page editor**: page
-  fields + SEO fields + the section manager (add/edit/delete/reorder/
-  hide-show any section type via `DynamicForm`, link a section to a
-  Reusable Block) + Preview/Publish
-- **Menus & Navigation** — manage nav + true multi-column mega-menu
-  columns + footer link columns
-- **Reusable Blocks** — build a section once, link it into any page; editing
-  the block updates every page it's linked to
-- **Products** / **Services** — full CRUD: title, subtitle, description,
-  specs table, price, tags, CTA, thumbnail, SEO fields, and a gallery
-  manager for the popup's images/videos
-- **Media Library** — upload (writes to `/public/uploads` today; see the
-  swap-in note in `app/api/admin/upload/route.js` for CDN storage), alt
-  text, delete
-- **Site & Theme Settings** — logo, contact info, CTAs, footer text, and
-  color tokens (writes straight to the CSS custom properties the public
-  template already uses)
-- **Admin Users** — create/disable editor & admin logins
-- **Inquiries** — contact/quote-request form submissions
-
-## 4. Products/Services modal flow
-
-`components/site/sections/ProductsGrid.jsx` fetches the list from
-`/api/public/products` and `/api/public/services`. Clicking a tile fetches
-the *full* record (including its media gallery) and opens `ItemModal` —
-title, subtitle, description, spec table, tag pills, a background hero
-image/video, a scrollable gallery of the remaining media, the configured
-CTA button, and a permalink to the standalone detail page at
-`/products-services/[type]/[slug]` for SEO/direct linking.
-
-## 5. Repository layout
-
-```
-zigma-cms/
-├── .env.example              Copy to .env and fill in
-├── package.json               Scripts + dependencies (see below)
-├── next.config.js             Standalone output, image domains
-├── jsconfig.json              @/ import alias
-├── middleware.js              Protects /admin, dev-mode bypass
-├── schema.sql                 Full MySQL DDL
-├── scripts/
-│   ├── migrate.js              node scripts/migrate.js  — runs schema.sql
-│   ├── seed.js                 node scripts/seed.js     — loads defaultContent.js
-│   └── create-admin.js         node scripts/create-admin.js "Name" email pass
-├── lib/
-│   ├── db.js                   mysql2 pool + query()/withTransaction()
-│   ├── auth.js                 JWT session, bcrypt, dev bypass
-│   ├── content.js               DB-first reads with defaultContent.js fallback
-│   ├── defaultContent.js        Real template content (single source of truth)
-│   ├── resources.js             Generic-CRUD resource registry
-│   ├── sectionSchemas.js        Field schema per section type
-│   └── repeater.js              Shared "visibleItems()" filter helper
-├── components/
-│   ├── site/                    Public-facing components (Header, Footer,
-│   │                            SectionRenderer, sections/*)
-│   └── admin/                   Admin UI (AdminShell, DynamicForm,
-│                                 SectionList, ItemsAdmin, MediaPicker,
-│                                 GalleryManager, SeoFields)
-├── app/
-│   ├── layout.js                 Root layout, loads globals.css
-│   ├── globals.css               Template CSS (extracted verbatim) + admin styles
-│   ├── (site)/                   Public route group
-│   │   ├── layout.js              Header/Footer chrome, theme CSS injection
-│   │   ├── page.js                Homepage
-│   │   ├── [slug]/page.js         Any other CMS-managed page
-│   │   └── products-services/     Listing + [type]/[slug] detail pages
-│   ├── admin/                    Admin route group (see Section 3)
-│   ├── preview/[token]/page.js   Unpublished-draft preview by token
-│   └── api/
-│       ├── admin/                 Generic CRUD + auth/upload/publish/reorder
-│       └── public/                Read-only JSON for client-side sections
-└── public/uploads/               Local media storage (swap for CDN later)
-```
-
-## 6. Local setup, step by step
+## Quick Start
 
 ```bash
-# 1. Install dependencies
+# Install dependencies
 npm install
 
-# 2. Copy the env template and fill in your values
+# Setup environment
 cp .env.example .env
-# at minimum, set DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME
-# and JWT_SECRET to a long random string
+# Edit .env with your database credentials
 
-# 3. Create the database (if it doesn't exist yet)
-#    e.g. via phpMyAdmin, `mysql -u root -p -e "CREATE DATABASE zigma_cms"`,
-#    or your MySQL client of choice
+# One-command database setup (creates DB, runs migrations, seeds content, creates admin)
+npm run db:setup
 
-# 4. Run the schema migration
-npm run db:migrate
-
-# 5. Load the real template content
-npm run db:seed
-
-# 6. Create your first login (skip this in local dev — see below)
-npm run create-admin -- "Your Name" you@zigma-technologies.com "StrongPass123!"
-
-# 7. Start the dev server
+# Start development server
 npm run dev
 ```
 
-Then open:
-- **Public site**: http://localhost:3000
-- **Admin panel**: http://localhost:3000/admin
+Visit http://localhost:3000 for the public site and http://localhost:3000/admin for the admin panel.
 
-**About step 6 in local dev**: by default `DEV_BYPASS_AUTH=true` in
-`.env.example`, and whenever `NODE_ENV !== 'production'` the admin panel
-skips login entirely — you'll land straight on the dashboard without
-creating a user or signing in. Run `create-admin` anyway if you want to
-test the real login screen (set `DEV_BYPASS_AUTH=false` in `.env` first), or
-skip both entirely for pure local iteration.
+---
 
-**About the database being optional at first**: even with an empty or
-unreachable database, `npm run dev` will still render the full homepage
-with real content, because `lib/content.js` falls back to
-`lib/defaultContent.js`. This means you can `npm install && npm run dev`
-with zero DB setup just to look at the public site. The moment you want to
-*edit* content through `/admin`, you'll need the database connected and
-migrated.
+## Architecture
 
-## 7. Environment variables reference
+### Tech Stack
 
-All of these live in `.env` (copy from `.env.example`, never commit the
-real file):
+- **Framework**: Next.js 16 (App Router)
+- **Database**: MySQL/MariaDB with mysql2
+- **Authentication**: JWT with bcryptjs
+- **Styling**: Custom CSS extracted from original template
+- **Runtime**: Node.js 18+
 
-| Variable | Purpose | Example |
-|---|---|---|
-| `DB_HOST` | MySQL host | `localhost` or Hostinger's DB host |
-| `DB_PORT` | MySQL port | `3306` |
-| `DB_USER` | MySQL user | `u123_zigma` |
-| `DB_PASSWORD` | MySQL password | — |
-| `DB_NAME` | MySQL database name | `u123_zigma_cms` |
-| `JWT_SECRET` | Signs admin session cookies — long random string | — |
-| `JWT_EXPIRES_IN` | Session lifetime | `7d` |
-| `COOKIE_NAME` | Session cookie name | `zigma_admin_session` |
-| `DEV_BYPASS_AUTH` | Set `false` to force real login even in dev | `true` |
-| `MEDIA_BASE_URL` | Base path media URLs are served from | `/uploads` |
-| `NEXT_PUBLIC_SITE_URL` | Public site URL (metadata, absolute links) | `https://zigma-technologies.com` |
+### Key Concepts
 
-## 8. First-run checklist / known risk areas
+**Configuration-Driven Sections**
+- Pages are ordered lists of section rows from the database
+- Each section has a `type` and JSON `data` blob
+- `lib/sectionSchemas.js` defines field shapes for all section types
+- Admin's `DynamicForm` auto-renders inputs based on schemas
+- Supports nested repeaters (slides, cards, stats, milestones) with per-item hide/show
 
-This was written and internally verified (syntax-checked, SQL brace-
-balanced, JSON validated) but **has not been executed against a live
-database or browser**. Work through these in order on first run:
+**No-DB Fallback**
+- `lib/defaultContent.js` contains real template content (single source of truth)
+- `lib/content.js` reads DB first, falls back to defaultContent on failure
+- `scripts/seed.js` loads the same module into MySQL
+- Public site always renders real content, never blank pages
 
-1. `npm install` — confirm it completes without peer-dependency conflicts
-   given your Node version (`engines.node >= 18.18.0` in `package.json`).
-2. `npm run db:migrate` — confirm `schema.sql` applies cleanly against your
-   actual MySQL/MariaDB version. Requires MySQL 5.7+ / MariaDB 10.2+ for
-   the JSON column types used.
-3. `npm run db:seed` — confirm it completes without foreign-key errors
-   (it seeds in dependency order: settings → menus → pages/sections →
-   products/services).
-4. `npm run dev`, click through every `/admin` screen — Pages, Menus,
-   Reusable Blocks, Products, Services, Media, Settings, Users, Inquiries.
-5. **Middleware + Edge runtime**: `middleware.js` sets
-   `export const runtime = 'nodejs'` to keep `jsonwebtoken` (which needs
-   Node's `crypto` module) working. If your Next.js/hosting setup rejects
-   that flag, swap `jsonwebtoken` for an Edge-compatible library such as
-   `jose`, or move the JWT verification into a route handler instead of
-   middleware.
-6. **Visual fidelity**: the CSS was extracted verbatim from the original
-   template into `app/globals.css`, and the JSX markup was rebuilt to match
-   the real DOM structure and class names section-by-section (header,
-   hero, why-grid, stat bar, all five split-feature bands, legacy timeline,
-   projects, industries, testimonials, partners marquee, cert teaser, CTA
-   band, footer). This was checked by re-reading the source HTML, but a
-   literal side-by-side rendering diff still needs a browser — do that
-   pass before calling this production-ready.
-7. `npm run build` — the first real production build will surface anything
-   the syntax checker can't catch (type mismatches, missing exports,
-   Next.js-specific constraints).
+**Generic CRUD API**
+- `app/api/admin/[resource]/route.js` handles all tables
+- `lib/resources.js` defines table schemas and field whitelists
+- Automatic CRUD for pages, menus, sections, products, services, media, settings, users
 
-## 9. Deploying to Hostinger, step by step
+**Publish & Preview**
+- Publish snapshots sections to `publish_versions` table
+- Preview creates temporary tokens in `preview_versions`
+- Shareable preview links at `/preview/[token]`
 
-1. **Provision the database.** In hPanel, create a managed MySQL database.
-   Note the host, port, username, password, and database name.
-2. **Push to GitHub** (or your Git host of choice) and connect the repo in
-   hPanel's Node.js application screen, or deploy directly from your IDE
-   per Hostinger's docs.
-3. **Configure the app**:
+---
+
+## Folder Structure
+
+```
+zigma-cms/
+├── app/                          # Next.js App Router
+│   ├── (site)/                   # Public site routes
+│   │   ├── layout.js             # Header/Footer chrome
+│   │   ├── page.js               # Homepage
+│   │   ├── [slug]/page.js        # CMS pages
+│   │   └── products-services/     # Products/Services listing & details
+│   ├── admin/                    # Admin panel routes
+│   │   ├── dashboard/           # Dashboard
+│   │   ├── pages/                # Page management
+│   │   ├── menus/                # Navigation management
+│   │   ├── blocks/               # Reusable blocks
+│   │   ├── products/             # Products CRUD
+│   │   ├── services/             # Services CRUD
+│   │   ├── media/                # Media library
+│   │   ├── settings/             # Site & theme settings
+│   │   ├── users/                # Admin users
+│   │   └── inquiries/            # Contact form submissions
+│   ├── preview/[token]/          # Preview pages
+│   ├── api/
+│   │   ├── admin/                # Admin API (CRUD, auth, upload, publish)
+│   │   └── public/               # Public read-only API
+│   ├── globals.css               # Template CSS + admin styles
+│   └── layout.js                 # Root layout
+├── components/
+│   ├── site/                     # Public components
+│   │   ├── sections/             # Section components (Hero, WhyGrid, etc.)
+│   │   ├── Header.jsx            # Site header
+│   │   ├── Footer.jsx            # Site footer
+│   │   └── SectionRenderer.jsx   # Maps section types to components
+│   └── admin/                    # Admin components
+│       ├── AdminShell.jsx        # Admin layout wrapper
+│       ├── DynamicForm.jsx       # Auto-form from schemas
+│       ├── SectionList.jsx       # Section manager
+│       ├── MediaPicker.jsx       # Image/video picker
+│       ├── GalleryManager.jsx    # Product/service galleries
+│       └── SeoFields.jsx         # SEO metadata fields
+├── lib/
+│   ├── db.js                     # MySQL pool + query helpers
+│   ├── auth.js                   # JWT session, bcrypt, dev bypass
+│   ├── content.js                # DB reads with fallback
+│   ├── defaultContent.js         # Real template content
+│   ├── resources.js              # CRUD resource registry
+│   ├── sectionSchemas.js         # Section field definitions
+│   └── repeater.js               # Repeater item helpers
+├── scripts/
+│   ├── migrate.js                # Run schema.sql
+│   ├── seed.js                   # Load defaultContent.js
+│   ├── db-setup.js               # Complete DB setup
+│   └── create-admin.js           # Create admin user
+├── public/
+│   └── uploads/                  # Local media storage
+├── .env.example                  # Environment template
+├── .env                          # Your environment (don't commit)
+├── package.json                  # Dependencies & scripts
+├── next.config.js                # Next.js config
+├── middleware.js                 # Auth middleware
+└── schema.sql                    # Full MySQL DDL
+```
+
+---
+
+## Local Setup
+
+### Prerequisites
+
+- Node.js 18.18.0 or higher
+- MySQL 5.7+ or MariaDB 10.2+
+- npm or yarn
+
+### Step-by-Step
+
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment**
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` with your database credentials:
+   ```env
+   DB_HOST=localhost
+   DB_PORT=3306
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
+   DB_NAME=zigma_cms
+   JWT_SECRET=your_long_random_secret_string
+   ADMIN_NAME=Admin User
+   ADMIN_EMAIL=admin@example.com
+   ADMIN_PASSWORD=StrongPassword123!
+   ```
+
+3. **Database setup** (choose one)
+
+   **Option A: One-command setup (recommended)**
+   ```bash
+   npm run db:setup
+   ```
+   This drops existing DB, creates fresh DB, runs migrations, seeds content, and creates admin user.
+
+   **Option B: Manual steps**
+   ```bash
+   # Create database manually via MySQL client or phpMyAdmin
+   # Run migrations
+   npm run db:migrate
+   # Seed content
+   npm run db:seed
+   # Create admin user
+   npm run create-admin -- "Your Name" admin@example.com "password"
+   ```
+
+4. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Access the application**
+   - Public site: http://localhost:3000
+   - Admin panel: http://localhost:3000/admin
+
+### Dev Mode Bypass
+
+By default, `DEV_BYPASS_AUTH=true` in `.env` allows skipping login in development. The admin panel bypasses authentication when `NODE_ENV !== 'production'`. To test real login, set `DEV_BYPASS_AUTH=false` in `.env`.
+
+---
+
+## Database Setup
+
+### One-Command Setup
+
+```bash
+npm run db:setup
+```
+
+This command:
+1. Drops existing database (if exists)
+2. Creates fresh database
+3. Runs schema migrations
+4. Creates admin user from `.env` variables
+5. Seeds default content
+
+### Individual Commands
+
+```bash
+npm run db:migrate          # Apply schema.sql
+npm run db:seed             # Load default content
+npm run create-admin NAME EMAIL PASSWORD  # Create admin user
+```
+
+### Database Schema
+
+Key tables:
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Admin/editor logins (bcrypt hashed) |
+| `site_settings`, `theme_settings` | Global config + CSS variables |
+| `menus`, `menu_items` | Navigation + mega-menu + footer links |
+| `pages` | Page routes with publish status |
+| `sections`, `section_items` | Ordered content blocks |
+| `reusable_blocks` | Shareable section content |
+| `media_assets`, `item_media` | Media library + galleries |
+| `products`, `services` | Product/service data |
+| `inquiries` | Contact form submissions |
+| `seo_metadata` | SEO fields per page/item |
+| `publish_versions`, `preview_versions` | Content snapshots |
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `DB_HOST` | Yes | MySQL host | `localhost` |
+| `DB_PORT` | Yes | MySQL port | `3306` |
+| `DB_USER` | Yes | MySQL username | `root` |
+| `DB_PASSWORD` | Yes | MySQL password | `password` |
+| `DB_NAME` | Yes | Database name | `zigma_cms` |
+| `JWT_SECRET` | Yes | JWT signing secret | `long-random-string` |
+| `JWT_EXPIRES_IN` | No | Session lifetime | `7d` |
+| `COOKIE_NAME` | No | Session cookie name | `zigma_admin_session` |
+| `DEV_BYPASS_AUTH` | No | Skip auth in dev | `true` |
+| `MEDIA_BASE_URL` | No | Media URL base | `/uploads` |
+| `NEXT_PUBLIC_SITE_URL` | No | Public site URL | `https://example.com` |
+| `ADMIN_NAME` | No | Default admin name | `Admin User` |
+| `ADMIN_EMAIL` | No | Default admin email | `admin@example.com` |
+| `ADMIN_PASSWORD` | No | Default admin password | `StrongPass123!` |
+
+---
+
+## Admin Panel
+
+### Features
+
+- **Dashboard**: Content counts and quick stats
+- **Pages**: Create, edit, delete, reorder pages with section management
+- **Menus**: Manage navigation, mega-menus, and footer links
+- **Reusable Blocks**: Create sections once, reuse across pages
+- **Products & Services**: Full CRUD with galleries and SEO
+- **Media Library**: Upload and manage images/videos
+- **Settings**: Site settings and theme colors
+- **Users**: Manage admin accounts
+- **Inquiries**: View contact form submissions
+
+### Section Types
+
+Available section types (defined in `lib/sectionSchemas.js`):
+
+- **Hero Slider**: Slides with images, videos, CTAs, and tag pills
+- **Stat Counter Bar**: Animated statistics
+- **Why Us Grid**: Icon card grid
+- **Split Feature**: Image + feature cards band
+- **Legacy Timeline**: Milestone timeline
+- **Projects Grid**: Featured projects
+- **Industries Grid**: Industries served
+- **Testimonials**: Carousel
+- **Partners Marquee**: Logo marquee
+- **Certification Teaser**: Cert band
+- **Call-to-Action**: CTA band
+- **Products/Services Grid**: Dynamic product/service listing
+- **Footer**: Site footer
+- **Rich Text**: Freeform content
+
+### Common Workflows
+
+**Edit a page**
+1. Go to `/admin/pages`
+2. Select a page
+3. Edit page fields and SEO
+4. Add/edit/reorder sections
+5. Preview or Publish
+
+**Create reusable block**
+1. Go to `/admin/blocks`
+2. Create new block
+3. In page editor, set section's "Content source" to the block
+
+**Add product/service**
+1. Go to `/admin/products` or `/admin/services`
+2. Click "New"
+3. Fill in fields
+4. Save
+5. Use Gallery Manager for images
+6. Configure SEO fields
+
+**Change theme colors**
+1. Go to `/admin/settings`
+2. Edit "Theme colors"
+3. Changes apply globally within 60s (ISR)
+
+---
+
+## Deployment
+
+### Hostinger (Node.js Hosting)
+
+1. **Provision database**
+   - Create MySQL database in hPanel
+   - Note credentials
+
+2. **Deploy code**
+   - Push to GitHub
+   - Connect repo in hPanel Node.js app
+   - Or deploy via IDE
+
+3. **Configure app**
    - Entry point: `npm run build && npm run start`
-   - `package.json`'s `start` script runs `next start -p 3000` — adjust the
-     port if Hostinger requires binding to a specific `PORT` env var.
-4. **Set environment variables** in the Hostinger app config panel — every
-   value from `.env.example`, with real production secrets. Never commit
-   `.env`. Set `DEV_BYPASS_AUTH` to `false` (or omit it — it only applies
-   when `NODE_ENV !== 'production'`, and Hostinger sets
-   `NODE_ENV=production` in its Node hosting by default, so the bypass is
-   already inert there).
-5. **Run migration, seed, and create your admin user once**, against the
-   managed MySQL instance, via SSH or a one-off Node run in the Hostinger
-   environment:
+   - Set environment variables in hPanel
+   - Set `DEV_BYPASS_AUTH=false` or omit
+
+4. **Run setup**
    ```bash
    npm run db:migrate
    npm run db:seed
-   npm run create-admin -- "Your Name" you@zigma-technologies.com "StrongPass123!"
+   npm run create-admin -- "Name" email "password"
    ```
-6. **Point your domain** at the app. Hostinger's included SSL, CDN, and WAF
-   apply automatically at the hosting layer — no application changes
-   needed.
-7. **Backups**: rely on Hostinger's daily managed-MySQL backups; optionally
-   add a `mysqldump` cron job (or a manual export before major content
-   changes) for an additional restore point.
-8. **Media storage**: uploads write to `/public/uploads` on disk by
-   default, which works out of the box on Hostinger's 50GB NVMe Node
-   hosting. If you outgrow local storage, replace the write call in
-   `app/api/admin/upload/route.js` with your storage provider's SDK and
-   update `MEDIA_BASE_URL` — nothing else in the app needs to change, since
-   every consumer only ever reads `media_assets.url`.
 
-## 10. Day-to-day admin workflows
+5. **Point domain**
+   - Configure domain in hPanel
+   - SSL, CDN, WAF included
 
-- **Edit a page**: `/admin/pages` → pick a page → edit page fields/SEO,
-  then add/edit/reorder/hide sections in the section list. Each section's
-  fields come from `lib/sectionSchemas.js` via `DynamicForm` — repeater
-  items (slides, cards, milestones...) each have their own Hide/Show
-  toggle without deleting them.
-- **Reuse a section across pages**: `/admin/blocks` → create a block →
-  back in a page's section editor, set "Content source" to that block.
-  Editing the block from then on updates every page using it.
-- **Add a product/service**: `/admin/products` or `/admin/services` → New →
-  fill in fields → Save → then use the Gallery Manager on the saved item to
-  attach images/videos for the popup modal, and the SEO Fields panel for
-  meta tags.
-- **Change site-wide colors**: `/admin/settings` → Theme colors — these map
-  directly to the CSS custom properties the public template already uses,
-  so a change is live everywhere within the page's ISR window (60s).
-- **Preview before publishing**: in a page editor, click Preview to get a
-  shareable `/preview/[token]` link showing the current draft without
-  affecting the live site; click Publish to make it live.
+### General Deployment Checklist
 
-## 11. Extending the system
+- Set `NODE_ENV=production`
+- Set strong `JWT_SECRET`
+- Set `DEV_BYPASS_AUTH=false`
+- Run database migrations
+- Seed initial content
+- Create admin user
+- Configure media storage (CDN for production)
+- Set up backups
 
-- **New section type**: add a schema entry to `lib/sectionSchemas.js`, add
-  a matching component under `components/site/sections/`, register it in
-  `components/site/SectionRenderer.jsx`. The admin form appears
-  automatically — no new admin screen to build.
-- **New admin-editable table**: add one entry to `lib/resources.js`
-  (table name, field whitelist, JSON columns) and the generic CRUD API at
-  `/api/admin/<resource>` is live immediately.
-- **New template**: `pages.template` already exists in the schema for this
-  purpose. Add the new template's section types, components, and a second
-  stylesheet loaded per-`pages.template` value.
+---
 
-## 12. Troubleshooting
+## Development
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `/admin` redirects to login in production unexpectedly | `DEV_BYPASS_AUTH` doesn't apply in production by design | Run `npm run create-admin` and log in normally |
-| Public site shows template content but admin edits don't appear | DB query failing silently, falling back to `defaultContent.js` | Check server logs for `[content] DB query failed` and fix the DB connection |
-| `npm run db:migrate` fails with a JSON-type error | MySQL/MariaDB version too old | Upgrade to MySQL 5.7.8+ / MariaDB 10.2+ |
-| Middleware throws at runtime referencing `crypto` | Edge runtime rejecting `jsonwebtoken` | See Section 8, item 5 |
-| Uploaded media 404s after deploy | `/public/uploads` not persisted across deploys | Point `MEDIA_BASE_URL` at persistent/CDN storage per the note in `app/api/admin/upload/route.js` |
+### Available Scripts
+
+```bash
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run db:migrate   # Run database migrations
+npm run db:seed      # Seed database with content
+npm run db:setup     # Complete database setup
+npm run create-admin # Create admin user
+```
+
+### Adding New Section Types
+
+1. Add schema to `lib/sectionSchemas.js`
+2. Create component in `components/site/sections/`
+3. Register in `components/site/SectionRenderer.jsx`
+4. Admin form auto-generates from schema
+
+### Adding New Admin Resources
+
+1. Add entry to `lib/resources.js`
+2. Generic CRUD API auto-available at `/api/admin/[resource]`
+
+### Extending Templates
+
+- `pages.template` field exists in schema
+- Add new template types with custom section sets
+- Load different stylesheets per template
+
+---
+
+## Troubleshooting
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| `/admin` redirects to login in dev | `DEV_BYPASS_AUTH=false` | Set `DEV_BYPASS_AUTH=true` in `.env` |
+| Public shows default content but edits don't appear | DB query failing | Check DB connection in logs |
+| `db:migrate` fails with JSON error | MySQL version too old | Upgrade to MySQL 5.7+ / MariaDB 10.2+ |
+| Middleware throws crypto error | Edge runtime issue | Check `middleware.js` runtime setting |
+| Uploaded media 404s | `/public/uploads` not persisted | Configure CDN or persistent storage |
+| Build fails | Missing dependencies or type errors | Run `npm install` and check logs |
+
+### Common Database Issues
+
+**Connection refused**
+- Verify MySQL is running
+- Check `DB_HOST`, `DB_PORT` in `.env`
+
+**Access denied**
+- Verify user has CREATE DATABASE permission
+- Check `DB_USER`, `DB_PASSWORD` in `.env`
+
+**Table already exists**
+- `db:setup` drops DB first
+- Use `db:migrate` + `db:seed` separately to preserve data

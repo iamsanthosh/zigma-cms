@@ -18,6 +18,7 @@ async function api(url, options) {
 }
 
 const SITE_FIELDS = [
+  { key: 'logoImage', label: 'Logo image' },
   { key: 'siteName', label: 'Site name' },
   { key: 'tagline', label: 'Tagline' },
   { key: 'phone', label: 'Phone number' },
