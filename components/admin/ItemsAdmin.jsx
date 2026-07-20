@@ -6,7 +6,16 @@ import GalleryManager from './GalleryManager';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 

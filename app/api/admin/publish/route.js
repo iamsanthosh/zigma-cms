@@ -26,7 +26,7 @@ async function buildPageSnapshot(pageId) {
  *            touching the published/live content at all.
  */
 export async function POST(req) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!requireRole(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { entityType, entityId, action } = await req.json().catch(() => ({}));

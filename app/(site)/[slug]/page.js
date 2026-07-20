@@ -10,13 +10,15 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }) {
-  const page = await getPageBySlug(params.slug);
+  const { slug } = await params;
+  const page = await getPageBySlug(slug);
   if (!page) return {};
   return { title: page.title };
 }
 
 export default async function DynamicPage({ params }) {
-  const page = await getPageBySlug(params.slug);
+  const { slug } = await params;
+  const page = await getPageBySlug(slug);
   if (!page) notFound();
   return <SectionRenderer sections={page.sections} />;
 }

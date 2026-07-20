@@ -2,7 +2,7 @@ import { getMenu, getSiteSettings, getThemeSettings } from '@/lib/content';
 import Header from '@/components/site/Header';
 import Footer from '@/components/site/Footer';
 
-export const revalidate = 60; // ISR: re-fetch content-driven chrome at most once a minute
+export const revalidate = process.env.NODE_ENV === 'production' ? 60 : 1; // ISR: re-fetch content-driven chrome at most once a minute (1s in dev for faster feedback)
 
 export default async function SiteLayout({ children }) {
   const [primaryNav, footerCompany, footerCapabilities, settings, theme] = await Promise.all([

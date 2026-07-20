@@ -7,7 +7,7 @@ export const metadata = { title: 'Zigma CMS Admin' };
 // provides <html>/<body> and loads globals.css), so it only needs to add
 // the admin-specific chrome — it deliberately does NOT extend the public
 // (site) layout, since the admin has its own header/nav via AdminShell.
-export default function AdminLayout({ children }) {
-  const user = getSessionUser();
+export default async function AdminLayout({ children }) {
+  const user = await getSessionUser();
   return user ? <AdminShell user={user}>{children}</AdminShell> : <>{children}</>;
 }

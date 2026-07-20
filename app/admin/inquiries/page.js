@@ -3,15 +3,29 @@ import { useEffect, useState } from 'react';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
 export default function InquiriesAdmin() {
   const [rows, setRows] = useState([]);
+  const [error, setError] = useState('');
 
   async function load() {
-    setRows(await api('/api/admin/inquiries'));
+    try {
+      setRows(await api('/api/admin/inquiries'));
+    } catch (err) {
+      setError(err.message || 'Failed to load inquiries');
+    }
   }
 
   useEffect(() => {

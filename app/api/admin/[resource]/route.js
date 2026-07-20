@@ -31,8 +31,9 @@ function prepareWrite(body, resource) {
 }
 
 export async function GET(req, { params }) {
-  const resource = getResource(params.resource);
-  if (!resource) return NextResponse.json({ error: 'Unknown resource.' }, { status: 404 });
+  const { resource } = await params;
+  const resourceConfig = getResource(resource);
+  if (!resourceConfig) return NextResponse.json({ error: 'Unknown resource.' }, { status: 404 });
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q');
@@ -44,52 +45,53 @@ export async function GET(req, { params }) {
   const where = [];
   const values = [];
 
-  if (q && resource.searchable.length) {
-    where.push(`(${resource.searchable.map((c) => `${c} LIKE ?`).join(' OR ')})`);
-    resource.searchable.forEach(() => values.push(`%${q}%`));
+  if (q && resourceConfig.searchable.length) {
+    where.push(`(${resourceConfig.searchable.map((c) => `${c} LIKE ?`).join(' OR ')})`);
+    resourceConfig.searchable.forEach(() => values.push(`%${q}%`));
   }
-  if (pageIdFilter && resource.fields.includes('page_id')) {
+  if (pageIdFilter && resourceConfig.fields.includes('page_id')) {
     where.push('page_id = ?');
     values.push(pageIdFilter);
   }
-  if (sectionIdFilter && resource.fields.includes('section_id')) {
+  if (sectionIdFilter && resourceConfig.fields.includes('section_id')) {
     where.push('section_id = ?');
     values.push(sectionIdFilter);
   }
-  if (menuIdFilter && resource.fields.includes('menu_id')) {
+  if (menuIdFilter && resourceConfig.fields.includes('menu_id')) {
     where.push('menu_id = ?');
     values.push(menuIdFilter);
   }
-  if (itemIdFilter && resource.fields.includes('item_id')) {
+  if (itemIdFilter && resourceConfig.fields.includes('item_id')) {
     where.push('item_id = ?');
     values.push(itemIdFilter);
   }
 
-  const sql = `SELECT * FROM ${resource.table} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${resource.orderBy}`;
+  const sql = `SELECT * FROM ${resourceConfig.table} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${resourceConfig.orderBy}`;
   const rows = await query(sql, values);
-  return NextResponse.json(rows.map((r) => serializeRow(r, resource)));
+  return NextResponse.json(rows.map((r) => serializeRow(r, resourceConfig)));
 }
 
 export async function POST(req, { params }) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!requireRole(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const resource = getResource(params.resource);
-  if (!resource) return NextResponse.json({ error: 'Unknown resource.' }, { status: 404 });
+  const { resource } = await params;
+  const resourceConfig = getResource(resource);
+  if (!resourceConfig) return NextResponse.json({ error: 'Unknown resource.' }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
-  const values = prepareWrite(body, resource);
+  const values = prepareWrite(body, resourceConfig);
 
   const columns = Object.keys(values);
   if (!columns.length) return NextResponse.json({ error: 'No valid fields provided.' }, { status: 400 });
 
   const columnList = columns.map((c) => `\`${c}\``).join(', ');
   const placeholders = columns.map(() => '?').join(', ');
-  const sql = `INSERT INTO ${resource.table} (${columnList}) VALUES (${placeholders})`;
+  const sql = `INSERT INTO ${resourceConfig.table} (${columnList}) VALUES (${placeholders})`;
   const result = await query(sql, Object.values(values));
 
-  const pk = resource.primaryKey || 'id';
-  const idValue = resource.primaryKey ? values[resource.primaryKey] : result.insertId;
-  const [row] = await query(`SELECT * FROM ${resource.table} WHERE \`${pk}\` = ?`, [idValue]);
-  return NextResponse.json(serializeRow(row, resource), { status: 201 });
+  const pk = resourceConfig.primaryKey || 'id';
+  const idValue = resourceConfig.primaryKey ? values[resourceConfig.primaryKey] : result.insertId;
+  const [row] = await query(`SELECT * FROM ${resourceConfig.table} WHERE \`${pk}\` = ?`, [idValue]);
+  return NextResponse.json(serializeRow(row, resourceConfig), { status: 201 });
 }

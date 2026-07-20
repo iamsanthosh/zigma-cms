@@ -1,16 +1,26 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, use } from 'react';
 import SectionList from '@/components/admin/SectionList';
 import SeoFields from '@/components/admin/SeoFields';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
 export default function PageEditor({ params }) {
-  const pageId = params.id;
+  const { id } = use(params);
+  const pageId = id;
   const [page, setPage] = useState(null);
   const [sections, setSections] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);

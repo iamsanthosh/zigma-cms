@@ -3,7 +3,7 @@ import { query } from '@/lib/db';
 import { hashPassword, getSessionUser, requireRole } from '@/lib/auth';
 
 export async function POST(req) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!requireRole(user, ['admin'])) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { name, email, password, role } = await req.json().catch(() => ({}));

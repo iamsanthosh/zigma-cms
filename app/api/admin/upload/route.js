@@ -16,7 +16,7 @@ import { query } from '@/lib/db';
 // since every consumer only ever reads `media_assets.url`.
 
 export async function POST(req) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const formData = await req.formData();

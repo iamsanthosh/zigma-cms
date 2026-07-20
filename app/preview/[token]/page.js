@@ -14,9 +14,10 @@ function parse(raw) {
 }
 
 export default async function PreviewPage({ params }) {
+  const { token } = await params;
   const [row] = await query(
     `SELECT * FROM preview_versions WHERE token = ? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1`,
-    [params.token]
+    [token]
   );
   if (!row) notFound();
 

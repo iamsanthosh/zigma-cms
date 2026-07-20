@@ -3,7 +3,17 @@ import { useEffect, useState } from 'react';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      // Response body is not JSON, use status text
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
@@ -15,7 +25,11 @@ export default function PagesListPage() {
   const [error, setError] = useState('');
 
   async function load() {
-    setPages(await api(`/api/admin/pages?q=${encodeURIComponent(q)}`));
+    try {
+      setPages(await api(`/api/admin/pages?q=${encodeURIComponent(q)}`));
+    } catch (err) {
+      setError(err.message || 'Failed to load pages');
+    }
   }
 
   useEffect(() => {

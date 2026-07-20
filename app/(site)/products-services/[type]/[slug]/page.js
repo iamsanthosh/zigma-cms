@@ -4,14 +4,16 @@ import { notFound } from 'next/navigation';
 export const revalidate = 60;
 
 export async function generateMetadata({ params }) {
-  const item = await getItemBySlug(params.type === 'service' ? 'service' : 'product', params.slug);
+  const { type, slug } = await params;
+  const item = await getItemBySlug(type === 'service' ? 'service' : 'product', slug);
   if (!item) return {};
   return { title: `${item.title} | Zigma Technologies`, description: item.subtitle || item.description };
 }
 
 export default async function ItemDetailPage({ params }) {
-  const type = params.type === 'service' ? 'service' : 'product';
-  const item = await getItemBySlug(type, params.slug);
+  const { type, slug } = await params;
+  const itemType = type === 'service' ? 'service' : 'product';
+  const item = await getItemBySlug(itemType, slug);
   if (!item) notFound();
 
   const bg = item.media?.find((m) => m.role === 'background') || item.media?.[0];

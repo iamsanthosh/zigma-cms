@@ -3,7 +3,16 @@ import { useEffect, useState } from 'react';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
@@ -11,11 +20,16 @@ export default function MenusAdmin() {
   const [menus, setMenus] = useState([]);
   const [activeMenu, setActiveMenu] = useState(null);
   const [items, setItems] = useState([]);
+  const [error, setError] = useState('');
 
   async function loadMenus() {
-    const rows = await api('/api/admin/menus');
-    setMenus(rows);
-    if (!activeMenu && rows.length) setActiveMenu(rows[0]);
+    try {
+      const rows = await api('/api/admin/menus');
+      setMenus(rows);
+      if (!activeMenu && rows.length) setActiveMenu(rows[0]);
+    } catch (err) {
+      setError(err.message || 'Failed to load menus');
+    }
   }
 
   async function loadItems(menu) {
@@ -67,6 +81,8 @@ export default function MenusAdmin() {
   return (
     <div>
       <h1 className="admin-h1">Menus &amp; Navigation</h1>
+
+      {error && <p style={{ color: '#c0392b', marginBottom: '1rem' }}>{error}</p>}
 
       <div className="admin-toolbar">
         <select

@@ -3,7 +3,16 @@ import { useEffect, useState } from 'react';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
@@ -11,9 +20,14 @@ export default function UsersAdmin() {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'editor' });
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
 
   async function load() {
-    setUsers(await api('/api/admin/users'));
+    try {
+      setUsers(await api('/api/admin/users'));
+    } catch (err) {
+      setError(err.message || 'Failed to load users');
+    }
   }
 
   useEffect(() => {

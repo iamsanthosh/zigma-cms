@@ -3,7 +3,16 @@ import { useEffect, useState } from 'react';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
@@ -11,9 +20,14 @@ export default function MediaAdmin() {
   const [assets, setAssets] = useState([]);
   const [q, setQ] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
 
   async function load() {
-    setAssets(await api(`/api/admin/media?q=${encodeURIComponent(q)}`));
+    try {
+      setAssets(await api(`/api/admin/media?q=${encodeURIComponent(q)}`));
+    } catch (err) {
+      setError(err.message || 'Failed to load media');
+    }
   }
 
   useEffect(() => {

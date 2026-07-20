@@ -9,7 +9,7 @@ import { getSessionUser, requireRole } from '@/lib/auth';
  * tiles, media gallery order, etc.) so reordering is one shared code path.
  */
 export async function POST(req) {
-  const user = getSessionUser();
+  const user = await getSessionUser();
   if (!requireRole(user)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { resource: resourceName, order } = await req.json().catch(() => ({}));

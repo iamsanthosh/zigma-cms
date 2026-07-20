@@ -4,7 +4,16 @@ import MediaPicker from '@/components/admin/MediaPicker';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  if (!res.ok) {
+    let errorMessage = 'Request failed';
+    try {
+      const data = await res.json();
+      errorMessage = data.error || errorMessage;
+    } catch {
+      errorMessage = res.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
   return res.json();
 }
 
@@ -42,6 +51,7 @@ export default function SettingsAdmin() {
   async function saveSetting(key, value) {
     await api(`/api/admin/site-settings/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value }) })
       .catch(() => api('/api/admin/site-settings', { method: 'POST', body: JSON.stringify({ key, value }) }));
+    setSettings((s) => ({ ...s, [key]: value }));
     setSaved(`Saved "${key}".`);
     setTimeout(() => setSaved(''), 1500);
   }
