@@ -15,5 +15,6 @@ export async function generateMetadata() {
 export default async function HomePage() {
   const page = await getPageBySlug('home');
   if (!page) notFound();
+
   return <SectionRenderer sections={page.sections} />;
 }

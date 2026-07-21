@@ -302,7 +302,6 @@ Available section types (defined in `lib/sectionSchemas.js`):
 - **Certification Teaser**: Cert band
 - **Call-to-Action**: CTA band
 - **Products/Services Grid**: Dynamic product/service listing
-- **Footer**: Site footer
 - **Rich Text**: Freeform content
 
 ### Common Workflows

@@ -95,8 +95,8 @@ async function createAdminUser() {
 }
 
 async function runSeed() {
-  const { siteSettings, themeSettings, menus, pages, products, services } = require('../lib/defaultContent');
-
+  const defaultContent = require('../lib/defaultContent').default;
+  
   const conn = await mysql.createConnection({
     ...dbConfig,
     database: process.env.DB_NAME
@@ -105,111 +105,127 @@ async function runSeed() {
   console.log('\n📦 Seeding content...');
 
   // Seed site settings
-  for (const [key, value] of Object.entries(siteSettings)) {
-    await conn.execute(
-      `INSERT INTO site_settings (\`key\`, \`value\`) VALUES (?, ?)
-       ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)`,
-      [key, JSON.stringify(value)]
-    );
-  }
-
-  // Seed theme settings
-  for (const t of themeSettings) {
-    await conn.execute(
-      `INSERT INTO theme_settings (\`key\`, \`value\`, category) VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`), category = VALUES(category)`,
-      [t.key, t.value, t.category]
-    );
-  }
-
-  // Seed menus
-  for (const menu of menus) {
-    await conn.execute(
-      `INSERT INTO menus (slug, label, active) VALUES (?, ?, 1)
-       ON DUPLICATE KEY UPDATE label = VALUES(label)`,
-      [menu.slug, menu.label]
-    );
-    const [[menuRow]] = await conn.query(`SELECT id FROM menus WHERE slug = ?`, [menu.slug]);
-    await conn.execute(`DELETE FROM menu_items WHERE menu_id = ?`, [menuRow.id]);
-
-    for (const item of menu.items || []) {
-      await insertMenuItemRecursive(conn, menuRow.id, item, null);
+  if (defaultContent.settings) {
+    for (const [key, value] of Object.entries(defaultContent.settings)) {
+      await conn.execute(
+        `INSERT INTO site_settings (\`key\`, \`value\`) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)`,
+        [key, typeof value === 'string' ? value : JSON.stringify(value)]
+      );
     }
   }
 
-  // Seed pages
-  for (const page of pages) {
-    const [pageResult] = await conn.execute(
-      `INSERT INTO pages (slug, title, template, visible, active, publish_status)
-       VALUES (?, ?, ?, 1, 1, 'published')
-       ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-      [page.slug, page.title, page.template || 'default']
-    );
-
-    const pageId = pageResult.insertId || (await getPageIdBySlug(conn, page.slug));
-
-    // Clear existing sections
-    await conn.execute(`DELETE FROM sections WHERE page_id = ?`, [pageId]);
-
-    // Insert sections
-    for (const section of page.sections || []) {
-      const [sectionResult] = await conn.execute(
-        `INSERT INTO sections (page_id, type, data, background_style, \`order\`, visible, active)
-         VALUES (?, ?, ?, ?, ?, 1, 1)`,
-        [pageId, section.type, JSON.stringify(section.data || {}), section.backgroundStyle || 'light', section.order || 0]
+  // Seed menus
+  if (defaultContent.menus) {
+    for (const menu of defaultContent.menus) {
+      await conn.execute(
+        `INSERT INTO menus (slug, label, active) VALUES (?, ?, 1)
+         ON DUPLICATE KEY UPDATE label = VALUES(label)`,
+        [menu.id || menu.slug, menu.name || menu.label]
       );
+      const [[menuRow]] = await conn.query(`SELECT id FROM menus WHERE slug = ? OR slug = ?`, [menu.id, menu.slug]);
+      if (menuRow) {
+        await conn.execute(`DELETE FROM menu_items WHERE menu_id = ?`, [menuRow.id]);
 
-      const sectionId = sectionResult.insertId;
-
-      // Insert section items
-      for (const item of section.items || []) {
-        await conn.execute(
-          `INSERT INTO section_items (section_id, data, \`order\`, visible, active)
-           VALUES (?, ?, ?, 1, 1)`,
-          [sectionId, JSON.stringify(item), section.items.indexOf(item)]
-        );
+        for (const item of menu.items || []) {
+          await insertMenuItemRecursive(conn, menuRow.id, item, null);
+        }
       }
     }
   }
 
-  // Seed products
-  for (const product of products || []) {
-    await conn.execute(
-      `INSERT INTO products (slug, title, subtitle, description, specifications, price_label, tags, cta_label, cta_url, visible, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
-       ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-      [
-        product.slug,
-        product.title,
-        product.subtitle || null,
-        product.description || null,
-        JSON.stringify(product.specifications || []),
-        product.price_label || null,
-        product.tags || null,
-        product.cta_label || null,
-        product.cta_url || null
-      ]
-    );
-  }
+  // Seed pages with sections
+  if (defaultContent.pages && defaultContent.sections) {
+    for (const page of defaultContent.pages) {
+      const [pageResult] = await conn.execute(
+        `INSERT INTO pages (slug, title, template, visible, active, publish_status)
+         VALUES (?, ?, ?, 1, 1, 'published')
+         ON DUPLICATE KEY UPDATE title = VALUES(title)`,
+        [page.slug, page.title, page.template || 'default']
+      );
 
-  // Seed services
-  for (const service of services || []) {
-    await conn.execute(
-      `INSERT INTO services (slug, title, subtitle, description, specifications, price_label, tags, cta_label, cta_url, visible, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
-       ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-      [
-        service.slug,
-        service.title,
-        service.subtitle || null,
-        service.description || null,
-        JSON.stringify(service.specifications || []),
-        service.price_label || null,
-        service.tags || null,
-        service.cta_label || null,
-        service.cta_url || null
-      ]
-    );
+      const pageId = pageResult.insertId || (await getPageIdBySlug(conn, page.slug));
+
+      // Clear existing sections
+      await conn.execute(`DELETE FROM sections WHERE page_id = ?`, [pageId]);
+
+      // Seed hero section to home page
+      if (page.slug === 'home') {
+        const heroSection = defaultContent.sections.find(s => s.type === 'hero');
+        if (heroSection) {
+          const [sectionResult] = await conn.execute(
+            `INSERT INTO sections (page_id, type, name, data, background_style, \`order\`, visible, active)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
+            [
+              pageId,
+              heroSection.type,
+              'Hero Slider',
+              JSON.stringify(heroSection),
+              heroSection.backgroundStyle || 'light',
+              1
+            ]
+          );
+
+          // Insert hero slides as items
+          if (heroSection.slides) {
+            for (let i = 0; i < heroSection.slides.length; i++) {
+              await conn.execute(
+                `INSERT INTO section_items (section_id, data, \`order\`, visible, active)
+                 VALUES (?, ?, ?, 1, 1)`,
+                [sectionResult.insertId, JSON.stringify(heroSection.slides[i]), i]
+              );
+            }
+          }
+        }
+
+        // Add other sections to home page in order
+        let order = 2;
+        const homePageSections = defaultContent.sections.filter(s => s.type !== 'hero').sort((a, b) => a.order - b.order);
+        for (const section of homePageSections) {
+          const [sectionResult] = await conn.execute(
+            `INSERT INTO sections (page_id, type, name, data, background_style, \`order\`, visible, active)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
+            [
+              pageId,
+              section.type,
+              section.title || section.slug,
+              JSON.stringify(section),
+              section.backgroundStyle || 'light',
+              order
+            ]
+          );
+
+          // Insert section items based on type
+          if (section.stats) {
+            for (let i = 0; i < section.stats.length; i++) {
+              await conn.execute(
+                `INSERT INTO section_items (section_id, data, \`order\`, visible, active)
+                 VALUES (?, ?, ?, 1, 1)`,
+                [sectionResult.insertId, JSON.stringify(section.stats[i]), i]
+              );
+            }
+          } else if (section.cards) {
+            for (let i = 0; i < section.cards.length; i++) {
+              await conn.execute(
+                `INSERT INTO section_items (section_id, data, \`order\`, visible, active)
+                 VALUES (?, ?, ?, 1, 1)`,
+                [sectionResult.insertId, JSON.stringify(section.cards[i]), i]
+              );
+            }
+          } else if (section.items) {
+            for (let i = 0; i < section.items.length; i++) {
+              await conn.execute(
+                `INSERT INTO section_items (section_id, data, \`order\`, visible, active)
+                 VALUES (?, ?, ?, 1, 1)`,
+                [sectionResult.insertId, JSON.stringify(section.items[i]), i]
+              );
+            }
+          }
+
+          order++;
+        }
+      }
+    }
   }
 
   await conn.end();

@@ -117,6 +117,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Seed failed:', err.message);
+  console.error('Seed failed:', err && err.stack ? err.stack : err);
   process.exit(1);
 });
