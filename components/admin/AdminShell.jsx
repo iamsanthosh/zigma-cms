@@ -9,7 +9,8 @@ const NAV = [
   { href: '/admin/products', label: 'Products' },
   { href: '/admin/services', label: 'Services' },
   { href: '/admin/media', label: 'Media Library' },
-  { href: '/admin/settings', label: 'Site & Theme Settings' },
+  { href: '/admin/enhanced-theme', label: 'Enhanced Theme' },
+  { href: '/admin/settings', label: 'Site Settings' },
   { href: '/admin/users', label: 'Admin Users' }
 ];
 
@@ -34,7 +35,7 @@ export default function AdminShell({ user, children }) {
         ))}
         <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
           <div style={{ fontSize: '0.8rem', color: '#8FA3C2', marginBottom: '0.5rem' }}>
-            {user.name} · {user.role}
+            {user?.name || 'User'} · {user?.role || 'Admin'}
           </div>
           <button className="admin-btn admin-btn-ghost" onClick={logout} style={{ width: '100%', justifyContent: 'center' }}>
             Log out

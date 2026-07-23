@@ -2,33 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getResource } from '@/lib/resources';
 import { getSessionUser, requireRole } from '@/lib/auth';
-
-function serializeRow(row, resource) {
-  const out = { ...row };
-  for (const field of resource.json) {
-    if (out[field] != null && typeof out[field] === 'string') {
-      try {
-        out[field] = JSON.parse(out[field]);
-      } catch {
-        /* leave as-is */
-      }
-    }
-  }
-  return out;
-}
-
-function prepareWrite(body, resource) {
-  const values = {};
-  for (const field of resource.fields) {
-    if (!(field in body)) continue;
-    let val = body[field];
-    if (resource.json.includes(field) && val != null && typeof val !== 'string') {
-      val = JSON.stringify(val);
-    }
-    values[field] = val;
-  }
-  return values;
-}
+import { serializeRow, prepareWrite } from '@/lib/apiHelpers';
 
 export async function GET(_req, { params }) {
   const { resource, id } = await params;

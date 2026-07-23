@@ -44,7 +44,7 @@ export default function MediaPicker({ value, onChange, accept = 'image' }) {
           </button>
         </div>
       ) : (
-        <p style={{ fontSize: '0.8rem', color: '#8FA3C2', marginBottom: '0.5rem' }}>No {accept} selected</p>
+        <p style={{ fontSize: '0.8rem', color: 'var(--admin-text-muted)', marginBottom: '0.5rem' }}>No {accept} selected</p>
       )}
 
       <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setOpen((o) => !o)}>

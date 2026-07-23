@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import DynamicForm from '@/components/admin/DynamicForm';
+import FloatingActionBar from '@/components/admin/FloatingActionBar';
 import { sectionTypeOptions, getSectionSchema } from '@/lib/sectionSchemas';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -22,6 +24,9 @@ export default function ReusableBlocksAdmin() {
   const [blocks, setBlocks] = useState([]);
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [status, setStatus] = useState('');
+  const router = useUnsavedChanges(hasUnsavedChanges);
 
   async function load() {
     try {
@@ -45,9 +50,24 @@ export default function ReusableBlocksAdmin() {
     load();
   }
 
+  async function handleSave() {
+    await save(editing);
+  }
+
   async function save(fields) {
     const updated = await api(`/api/admin/reusable-blocks/${editing.id}`, { method: 'PUT', body: JSON.stringify(fields) });
     setEditing(updated);
+    setHasUnsavedChanges(false);
+    setStatus('Saved.');
+    setTimeout(() => setStatus(''), 2000);
+    load();
+  }
+
+  async function duplicate(block) {
+    const duplicated = await api('/api/admin/reusable-blocks', {
+      method: 'POST',
+      body: JSON.stringify({ name: `${block.name} (copy)`, type: block.type, data: block.data })
+    });
     load();
   }
 
@@ -62,32 +82,42 @@ export default function ReusableBlocksAdmin() {
     const schema = getSectionSchema(editing.type);
     return (
       <div>
+        <FloatingActionBar
+          onSave={handleSave}
+          hasUnsavedChanges={hasUnsavedChanges}
+          status={status}
+          extraButtons={
+            <>
+              <button className="admin-btn admin-btn-ghost" onClick={() => setEditing(null)}>Back to list</button>
+              <button className="admin-btn admin-btn-danger" onClick={() => remove(editing)}>Delete</button>
+            </>
+          }
+        />
+
         <div className="admin-toolbar">
           <h1 className="admin-h1" style={{ marginBottom: 0 }}>{editing.name}</h1>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="admin-btn admin-btn-ghost" onClick={() => setEditing(null)}>Back to list</button>
-            <button className="admin-btn admin-btn-danger" onClick={() => remove(editing)}>Delete</button>
-          </div>
         </div>
 
         <div className="admin-card">
-          <div className="admin-field">
-            <label>Block name (admin-facing)</label>
-            <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} onBlur={() => save({ name: editing.name })} />
-          </div>
-          <div className="admin-field">
-            <label>Section type</label>
-            <select value={editing.type} onChange={(e) => save({ type: e.target.value, data: {} })}>
-              {sectionTypeOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+          <div className="admin-grid-2">
+            <div className="admin-field">
+              <label>Block name (admin-facing)</label>
+              <input value={editing.name} onChange={(e) => { setEditing({ ...editing, name: e.target.value }); setHasUnsavedChanges(true); }} />
+            </div>
+            <div className="admin-field">
+              <label>Section type</label>
+              <select value={editing.type} onChange={(e) => { setEditing({ ...editing, type: e.target.value, data: {} }); setHasUnsavedChanges(true); }}>
+                {sectionTypeOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
         {schema && (
           <div className="admin-card">
-            <DynamicForm schema={schema} value={editing.data || {}} onChange={(data) => save({ data })} />
+            <DynamicForm schema={schema} value={editing.data || {}} onChange={(data) => { setEditing({ ...editing, data }); setHasUnsavedChanges(true); }} />
           </div>
         )}
       </div>
@@ -110,16 +140,20 @@ export default function ReusableBlocksAdmin() {
             <tr>
               <th>Name</th>
               <th>Type</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {blocks.map((b) => (
               <tr key={b.id}>
-                <td>{b.name}</td>
+                <td><strong>{b.name}</strong></td>
                 <td>{getSectionSchema(b.type)?.label || b.type}</td>
                 <td>
-                  <button className="admin-btn admin-btn-ghost" onClick={() => setEditing(b)}>Edit</button>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    <button className="admin-btn admin-btn-ghost" onClick={() => duplicate(b)}>Duplicate</button>
+                    <button className="admin-btn admin-btn-ghost" onClick={() => setEditing(b)}>Edit</button>
+                    <button className="admin-btn admin-btn-danger" onClick={() => remove(b)}>Delete</button>
+                  </div>
                 </td>
               </tr>
             ))}

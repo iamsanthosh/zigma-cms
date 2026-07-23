@@ -2,95 +2,118 @@
 
 import { visibleItems } from '@/lib/repeater';
 
-export default function Timeline({ data }) {
+export default function Timeline({ data, backgroundStyle }) {
+  if (!data) {
+    return null;
+  }
+  
   const items = visibleItems(data.items);
+  
+  const eyebrowClasses = data.eyebrowClassName ? `eyebrow ${data.eyebrowClassName}` : 'eyebrow';
+  const eyebrowStyle = data.eyebrowColor ? { color: data.eyebrowColor } : undefined;
+  
+  // Timeline year/dot color from data or default to cyan
+  const timelineYearColor = data.timelineYearColor || '#00D4FF';
+  
+  // Alignment settings
+  const sectionHeadAlignment = data.alignment || 'center';
+  const itemAlignment = data.itemAlignment || 'center';
+  const sectionHeadClasses = `section-head ${sectionHeadAlignment}`;
 
   return (
-    <section className="section section-light">
+    <section className={`section section-${backgroundStyle || 'light'}`}>
       <div className="container">
-        <div className="section-head center">
-          {data.eyebrow && <div className="eyebrow eyebrow-orange">{data.eyebrow}</div>}
+        <div className={sectionHeadClasses}>
+          {data.eyebrow && (
+            <div className={eyebrowClasses} style={eyebrowStyle}>
+              {data.eyebrow}
+            </div>
+          )}
           {data.heading && <h2>{data.heading}</h2>}
           {data.body && <p>{data.body}</p>}
         </div>
 
-        <div className="timeline">
+        <div className="timeline-scroller">
           {items.map((item, i) => (
-            <div className={`timeline-item ${item.isCurrent ? 'is-current' : ''}`} key={i}>
-              <div className="timeline-dot" />
-              <div className="timeline-content">
-                <div className="timeline-year">{item.year}</div>
-                <h4>{item.title}</h4>
-                <p>{item.description}</p>
-              </div>
+            <div className={`timeline-item ${item.isCurrent ? 'is-current' : ''}`} key={i} style={{ textAlign: itemAlignment }}>
+              <div className="timeline-dot" style={{ borderColor: timelineYearColor, backgroundColor: item.isCurrent ? timelineYearColor : 'var(--bg-light, #f5f5f5)' }} />
+              <div className="timeline-year" style={{ color: timelineYearColor }}>{item.year}</div>
+              <h5>{item.title}</h5>
+              <p>{item.description}</p>
             </div>
           ))}
         </div>
+
+        {data.ctaLabel && (
+          <a href={data.ctaUrl || '#'} className="btn btn-ghost btn-sm" style={{ marginTop: '2rem' }}>
+            {data.ctaLabel} →
+          </a>
+        )}
       </div>
 
       <style jsx>{`
-        .timeline {
-          position: relative;
+        .timeline-scroller {
           display: flex;
-          flex-direction: column;
+          overflow-x: auto;
           gap: 2rem;
-          margin-top: 3rem;
+          padding: 2rem 0;
+          margin-top: 2rem;
+          scroll-behavior: smooth;
         }
 
-        .timeline::before {
-          content: '';
-          position: absolute;
-          left: 20px;
-          top: 0;
-          bottom: 0;
-          width: 2px;
-          background: linear-gradient(to bottom, var(--accent, #00D4FF), transparent);
+        .timeline-scroller::-webkit-scrollbar {
+          height: 6px;
+        }
+
+        .timeline-scroller::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .timeline-scroller::-webkit-scrollbar-thumb {
+          background: var(--accent, #00D4FF);
+          border-radius: 3px;
         }
 
         .timeline-item {
+          flex: 0 0 300px;
           position: relative;
-          padding-left: 80px;
+          padding-top: 40px;
           padding-bottom: 1rem;
         }
 
         .timeline-dot {
           position: absolute;
-          left: 10px;
-          top: 5px;
+          left: 50%;
+          top: 0;
+          transform: translateX(-50%);
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: var(--bg-light, #f5f5f5);
-          border: 3px solid var(--accent, #00D4FF);
+          border: 3px solid;
           transition: all 0.3s ease;
         }
 
         .timeline-item.is-current .timeline-dot {
-          background: var(--accent, #00D4FF);
           box-shadow: 0 0 0 8px rgba(0, 212, 255, 0.1);
-        }
-
-        .timeline-content {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
+          transform: translateX(-50%) scale(1.3);
         }
 
         .timeline-year {
           font-weight: bold;
-          color: var(--accent, #00D4FF);
           font-size: 0.9rem;
+          margin: 0.5rem 0 0 0;
         }
 
-        .timeline-item h4 {
-          margin: 0;
-          font-size: 1.2rem;
+        .timeline-item h5 {
+          margin: 0.5rem 0 0 0;
+          font-size: 1.1rem;
         }
 
         .timeline-item p {
-          margin: 0;
+          margin: 0.5rem 0 0 0;
           color: var(--text-secondary, #666);
-          font-size: 0.95rem;
+          font-size: 0.9rem;
+          line-height: 1.5;
         }
       `}</style>
     </section>

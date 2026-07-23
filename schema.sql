@@ -29,14 +29,52 @@ CREATE TABLE IF NOT EXISTS site_settings (
   updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- Insert default global theme setting
+INSERT INTO site_settings (`key`, `value`) VALUES ('global_theme_id', '1') ON DUPLICATE KEY UPDATE `value` = '1';
+
 -- ---------------------------------------------------------------
--- theme_settings — CSS-variable-driven design tokens (colors, fonts, spacing)
+-- themes — configurable theme definitions
 -- ---------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS theme_settings (
-  `key`       VARCHAR(120) PRIMARY KEY,   -- e.g. "--orange", "--font-display"
-  `value`     VARCHAR(255) NOT NULL,
-  category    VARCHAR(60)  NOT NULL DEFAULT 'color', -- color | font | spacing | effect
+CREATE TABLE IF NOT EXISTS themes (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(120) NOT NULL,
+  slug        VARCHAR(120) NOT NULL UNIQUE,
+  description VARCHAR(500) NULL,
+  is_default  TINYINT(1) NOT NULL DEFAULT 0,
+  is_active   TINYINT(1) NOT NULL DEFAULT 1,
+  status      ENUM('draft', 'published', 'archived') DEFAULT 'published',
+  created_by  INT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------
+-- theme_media — media assets associated with themes (logos, backgrounds, etc.)
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS theme_media (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  theme_id    INT NOT NULL,
+  media_id    INT NOT NULL,
+  role        ENUM('logo','favicon','hero-bg','section-bg','footer-bg','icon','other') NOT NULL DEFAULT 'other',
+  `order`     INT NOT NULL DEFAULT 0,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (theme_id) REFERENCES themes(id) ON DELETE CASCADE,
+  FOREIGN KEY (media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------
+-- theme_component_styles — component-specific style overrides
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS theme_component_styles (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  theme_id    INT NOT NULL,
+  component   VARCHAR(120) NOT NULL,  -- e.g. "button", "card", "table", "nav"
+  property    VARCHAR(120) NOT NULL,  -- e.g. "border-radius", "box-shadow", "padding"
+  `value`     VARCHAR(255) NOT NULL,
+  selector    VARCHAR(255) NULL,      -- optional CSS selector for specificity
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (theme_id) REFERENCES themes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------
@@ -72,13 +110,15 @@ CREATE TABLE IF NOT EXISTS pages (
   slug          VARCHAR(160) NOT NULL UNIQUE,   -- '' or 'home' for homepage, 'about', 'products', ...
   title         VARCHAR(200) NOT NULL,
   template      VARCHAR(60)  NOT NULL DEFAULT 'default',
+  theme_id      INT NULL,                        -- override global theme per page
   visible       TINYINT(1) NOT NULL DEFAULT 1,
   active        TINYINT(1) NOT NULL DEFAULT 1,
   `order`       INT NOT NULL DEFAULT 0,
   publish_status ENUM('draft','published') NOT NULL DEFAULT 'draft',
   seo_id        INT NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (theme_id) REFERENCES themes(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------

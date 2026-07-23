@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { visibleItems } from '@/lib/repeater';
 
-function Counter({ value, suffix, label, iconSvgPath }) {
+function Counter({ value, suffix, label, iconHtml }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -33,12 +33,8 @@ function Counter({ value, suffix, label, iconSvgPath }) {
 
   return (
     <div className="stat">
-      {iconSvgPath && (
-        <div className="stat-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d={iconSvgPath} />
-          </svg>
-        </div>
+      {iconHtml && (
+        <div className="stat-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: iconHtml }} />
       )}
       <div className="num" data-count={value}>
         <span ref={ref}>0</span>
@@ -56,7 +52,7 @@ export default function StatBar({ data }) {
     <div className="stat-bar">
       <div className="container stat-grid">
         {stats.map((s, i) => (
-          <Counter key={i} value={s.value} suffix={s.suffix} label={s.label} iconSvgPath={s.iconSvgPath} />
+          <Counter key={i} value={s.value} suffix={s.suffix} label={s.label} iconHtml={s.iconHtml} />
         ))}
       </div>
     </div>

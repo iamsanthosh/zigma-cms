@@ -13,11 +13,13 @@ export default function IndustriesGrid({ data }) {
         <div className="ind-grid">
           {industries.map((ind, i) => (
             <div className="ind-item" key={i}>
-              {ind.iconSvgPath && (
+              {ind.iconHtml ? (
+                <div className="ind-icon" dangerouslySetInnerHTML={{ __html: ind.iconHtml }} />
+              ) : ind.iconSvgPath ? (
                 <svg className="ind-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                   <path d={ind.iconSvgPath} />
                 </svg>
-              )}
+              ) : null}
               <span>{ind.name}</span>
             </div>
           ))}

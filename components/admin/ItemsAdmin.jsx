@@ -1,8 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import MediaPicker from './MediaPicker';
 import SeoFields from './SeoFields';
 import GalleryManager from './GalleryManager';
+import FloatingActionBar from './FloatingActionBar';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -77,6 +80,25 @@ export default function ItemsAdmin({ resource, label }) {
     load();
   }
 
+  async function duplicate(item) {
+    if (!confirm(`Duplicate "${item.title}"? This will create a copy with all specifications.`)) return;
+    try {
+      const payload = { ...item };
+      delete payload.id;
+      delete payload.thumbnail_id;
+      delete payload.seo_id;
+      payload.title = `${item.title} (copy)`;
+      payload.slug = `${item.slug}-copy`;
+      payload.visible = 0;
+      payload.order = items.length;
+
+      const newItem = await api(`/api/admin/${resource}`, { method: 'POST', body: JSON.stringify(payload) });
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to duplicate item');
+    }
+  }
+
   async function toggle(item, field) {
     await api(`/api/admin/${resource}/${item.id}`, { method: 'PUT', body: JSON.stringify({ [field]: item[field] ? 0 : 1 }) });
     load();
@@ -115,13 +137,13 @@ export default function ItemsAdmin({ resource, label }) {
               <th>Price / model</th>
               <th>Tags</th>
               <th>Visible</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <td>{item.title}</td>
+                <td><strong>{item.title}</strong></td>
                 <td>{item.price_label}</td>
                 <td>{item.tags}</td>
                 <td>
@@ -129,13 +151,18 @@ export default function ItemsAdmin({ resource, label }) {
                     {item.visible ? 'Visible' : 'Hidden'}
                   </button>
                 </td>
-                <td style={{ display: 'flex', gap: '0.4rem' }}>
-                  <button className="admin-btn admin-btn-ghost" onClick={() => setEditing({ ...item, specifications: item.specifications || [] })}>
-                    Edit
-                  </button>
-                  <button className="admin-btn admin-btn-danger" onClick={() => remove(item)}>
-                    Delete
-                  </button>
+                <td>
+                  <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                    <button className="admin-btn admin-btn-ghost" onClick={() => duplicate(item)}>
+                      Duplicate
+                    </button>
+                    <button className="admin-btn admin-btn-ghost" onClick={() => setEditing({ ...item, specifications: item.specifications || [] })}>
+                      Edit
+                    </button>
+                    <button className="admin-btn admin-btn-danger" onClick={() => remove(item)}>
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -148,32 +175,57 @@ export default function ItemsAdmin({ resource, label }) {
 
 function ItemForm({ resource, item, error, onChange, onSave, onCancel }) {
   const set = (fields) => onChange({ ...item, ...fields });
-  const specs = item.specifications || [];
+  const specs = Array.isArray(item.specifications) ? item.specifications : [];
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [status, setStatus] = useState('');
+  const router = useUnsavedChanges(hasUnsavedChanges);
+  const [initialItem] = useState(item);
+
+  async function handleSave() {
+    setStatus('');
+    await onSave();
+    setHasUnsavedChanges(false);
+    setStatus('Saved.');
+    setTimeout(() => setStatus(''), 2000);
+  }
+
+  // Track unsaved changes by comparing with initial item
+  useEffect(() => {
+    const hasChanges = JSON.stringify(item) !== JSON.stringify(initialItem);
+    setHasUnsavedChanges(hasChanges);
+  }, [item, initialItem]);
 
   return (
     <div>
+      <FloatingActionBar
+        onSave={handleSave}
+        hasUnsavedChanges={hasUnsavedChanges}
+        status={status}
+        extraButtons={
+          <button className="admin-btn admin-btn-ghost" onClick={onCancel}>Cancel</button>
+        }
+      />
+
       <div className="admin-toolbar">
         <h1 className="admin-h1" style={{ marginBottom: 0 }}>{item.id ? `Edit: ${item.title}` : 'New item'}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="admin-btn admin-btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="admin-btn admin-btn-primary" onClick={onSave}>Save</button>
-        </div>
       </div>
 
       {error && (
-        <div className="admin-card" style={{ borderColor: '#f3c3c3', background: '#FEF4F4', color: '#c0392b' }}>
+        <div className="admin-card" style={{ borderColor: 'var(--admin-danger)', background: '#FEF4F4', color: 'var(--admin-danger)' }}>
           {error}
         </div>
       )}
 
       <div className="admin-card">
-        <div className="admin-field">
-          <label>Title *</label>
-          <input value={item.title} onChange={(e) => set({ title: e.target.value })} />
-        </div>
-        <div className="admin-field">
-          <label>Slug (used in the product/service URL) *</label>
-          <input value={item.slug} onChange={(e) => set({ slug: e.target.value })} />
+        <div className="admin-grid-2">
+          <div className="admin-field">
+            <label>Title *</label>
+            <input value={item.title} onChange={(e) => set({ title: e.target.value })} />
+          </div>
+          <div className="admin-field">
+            <label>Slug (used in the product/service URL) *</label>
+            <input value={item.slug} onChange={(e) => set({ slug: e.target.value })} />
+          </div>
         </div>
         <div className="admin-field">
           <label>Subtitle</label>
@@ -183,21 +235,25 @@ function ItemForm({ resource, item, error, onChange, onSave, onCancel }) {
           <label>Description</label>
           <textarea value={item.description || ''} onChange={(e) => set({ description: e.target.value })} />
         </div>
-        <div className="admin-field">
-          <label>Price / pricing model (free text)</label>
-          <input value={item.price_label || ''} onChange={(e) => set({ price_label: e.target.value })} />
+        <div className="admin-grid-2">
+          <div className="admin-field">
+            <label>Price / pricing model (free text)</label>
+            <input value={item.price_label || ''} onChange={(e) => set({ price_label: e.target.value })} />
+          </div>
+          <div className="admin-field">
+            <label>Tags (comma-separated)</label>
+            <input value={item.tags || ''} onChange={(e) => set({ tags: e.target.value })} />
+          </div>
         </div>
-        <div className="admin-field">
-          <label>Tags (comma-separated)</label>
-          <input value={item.tags || ''} onChange={(e) => set({ tags: e.target.value })} />
-        </div>
-        <div className="admin-field">
-          <label>CTA label</label>
-          <input value={item.cta_label || ''} onChange={(e) => set({ cta_label: e.target.value })} />
-        </div>
-        <div className="admin-field">
-          <label>CTA link</label>
-          <input value={item.cta_url || ''} onChange={(e) => set({ cta_url: e.target.value })} />
+        <div className="admin-grid-2">
+          <div className="admin-field">
+            <label>CTA label</label>
+            <input value={item.cta_label || ''} onChange={(e) => set({ cta_label: e.target.value })} />
+          </div>
+          <div className="admin-field">
+            <label>CTA link</label>
+            <input value={item.cta_url || ''} onChange={(e) => set({ cta_url: e.target.value })} />
+          </div>
         </div>
         <div className="admin-field">
           <label>Order</label>
@@ -245,7 +301,7 @@ function ItemForm({ resource, item, error, onChange, onSave, onCancel }) {
       {item.id ? (
         <GalleryManager itemType={resource === 'services' ? 'service' : 'product'} itemId={item.id} />
       ) : (
-        <p style={{ fontSize: '0.8rem', color: '#8FA3C2' }}>
+        <p style={{ fontSize: '0.8rem', color: 'var(--admin-text-muted)' }}>
           Save this item first, then come back to attach gallery images and videos for the popup modal.
         </p>
       )}

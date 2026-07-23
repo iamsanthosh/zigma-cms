@@ -52,7 +52,7 @@ function FieldInput({ field, value, onChange }) {
           <label>{field.label}</label>
           <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} />
           {field.type === 'richtext' && (
-            <p style={{ fontSize: '0.75rem', color: '#8FA3C2', marginTop: '0.25rem' }}>
+            <p style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', marginTop: '0.25rem' }}>
               HTML is allowed and rendered as-is on the public site.
             </p>
           )}
@@ -72,6 +72,19 @@ function FieldInput({ field, value, onChange }) {
         <div className="admin-field">
           <label>{field.label}</label>
           <input type="color" value={value || '#FF6B1A'} onChange={(e) => onChange(e.target.value)} style={{ width: 80 }} />
+        </div>
+      );
+    case 'select':
+      return (
+        <div className="admin-field">
+          <label>{field.label}</label>
+          <select value={value || ''} onChange={(e) => onChange(e.target.value)}>
+            <option value="">-- Select --</option>
+            {field.options?.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          {field.help && <p style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', marginTop: '0.25rem' }}>{field.help}</p>}
         </div>
       );
     case 'image':
@@ -115,6 +128,14 @@ function RepeaterField({ fields, value, onChange }) {
     onChange(value.filter((_, i) => i !== index));
   }
 
+  function duplicateItem(index) {
+    const next = [...value];
+    const itemToDuplicate = next[index];
+    const duplicatedItem = { ...itemToDuplicate };
+    next.splice(index + 1, 0, duplicatedItem);
+    onChange(next);
+  }
+
   function move(index, dir) {
     const target = index + dir;
     if (target < 0 || target >= value.length) return;
@@ -139,6 +160,7 @@ function RepeaterField({ fields, value, onChange }) {
               >
                 {item.active === false ? 'Show' : 'Hide'}
               </button>
+              <button type="button" className="admin-btn admin-btn-ghost" onClick={() => duplicateItem(i)}>Duplicate</button>
               <button type="button" className="admin-btn admin-btn-danger" onClick={() => removeItem(i)}>Remove</button>
             </div>
           </div>

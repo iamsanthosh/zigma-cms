@@ -13,10 +13,28 @@ export default function ProjectsGrid({ data }) {
         <div className="proj-grid">
           {projects.map((p, i) => (
             <div className="proj-card" key={i}>
-              {p.image?.url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.image.url} alt={p.title} loading="lazy" />
-              )}
+              <div className="proj-media">
+                {p.image?.url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.image.url} alt={p.title} loading="lazy" />
+                )}
+                {p.tags && p.tags.length > 0 && (
+                  <div className="proj-tags">
+                    {p.tags.map((tag, tagIndex) => (
+                      <span
+                        key={tagIndex}
+                        className="tag-pill"
+                        style={{
+                          '--tag-pill-color': tag.color || 'var(--cyan)',
+                          borderColor: tag.color ? `${tag.color}66` : 'rgba(0,212,255,0.4)'
+                        }}
+                      >
+                        {tag.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="proj-body">
                 <h5>{p.title}</h5>
                 {p.stat && <div className="proj-stat">{p.stat}</div>}

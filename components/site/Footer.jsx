@@ -72,11 +72,11 @@ export default function Footer({ companyMenu, capabilitiesMenu, settings }) {
         <div className="foot-bottom">
           <span>{settings.copyrightText || `© ${year} Zigma Technologies. All rights reserved.`}</span>
           <span className="foot-powered">
-            Powered by <strong>JustX Systems</strong>
+            {settings.footerPoweredByText || 'Powered by <strong>JustX Systems</strong>'}
           </span>
           <span className="foot-legal">
-            <a href="/privacy-policy">Privacy Policy</a>
-            <a href="/terms">Terms</a>
+            <a href={settings.privacyPolicyUrl || '/privacy-policy'}>Privacy Policy</a>
+            <a href={settings.termsUrl || '/terms'}>Terms</a>
           </span>
         </div>
       </div>

@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect } from 'react';
 import Hero from './sections/Hero';
 import Ecosystem from './sections/Ecosystem';
 import StatBar from './sections/StatBar';
@@ -13,9 +16,12 @@ import CtaBand from './sections/CtaBand';
 import ProductsGrid from './sections/ProductsGrid';
 import RichText from './sections/RichText';
 import Timeline from './sections/Timeline';
+import HeaderSection from './sections/HeaderSection';
+import { useTheme } from './ThemeProvider';
 
 const registry = {
   hero: Hero,
+  header: HeaderSection,
   ecosystem: Ecosystem,
   statBar: StatBar,
   whyGrid: WhyGrid,
@@ -33,7 +39,16 @@ const registry = {
 };
 
 /** Renders every visible section of a page in order, skipping any unknown/future type gracefully. */
-export default function SectionRenderer({ sections }) {
+export default function SectionRenderer({ sections, pageThemeId }) {
+  const { setCurrentTheme } = useTheme();
+
+  // Apply page-specific theme if set
+  useEffect(() => {
+    if (pageThemeId) {
+      // Dispatch event to parent layout to update theme
+      window.dispatchEvent(new CustomEvent('pageThemeChange', { detail: { id: pageThemeId } }));
+    }
+  }, [pageThemeId]);
   const aliasMap = {
     projGrid: 'projectsGrid',
     indGrid: 'industriesGrid',
@@ -46,7 +61,8 @@ export default function SectionRenderer({ sections }) {
 
   function normalizeSection(section) {
     const normalizedType = aliasMap[section.type] || section.type;
-    const baseData = { ...(section.data || {}), items: section.items || [] };
+    // Preserve items from section.data if section.items is empty
+    const baseData = { ...(section.data || {}), items: section.items?.length > 0 ? section.items : (section.data?.items || []) };
 
     // HERO
     if (normalizedType === 'hero') {
@@ -68,28 +84,53 @@ export default function SectionRenderer({ sections }) {
     // STAT BAR
     if (normalizedType === 'statBar') {
       const statsSrc = baseData.stats || baseData.items || [];
+      // Parse stringified stats (defensive against double-stringification)
+      const parseStatIfNeeded = (stat) => {
+        if (typeof stat === 'string') {
+          try {
+            return JSON.parse(stat);
+          } catch (e) {
+            return stat;
+          }
+        }
+        return stat;
+      };
       const stats = (statsSrc || []).map((s) => {
-        const numeral = s.numeral || s.value || s.count || '';
-        // extract digits and suffix
+        const stat = parseStatIfNeeded(s);
+        const numeral = stat.numeral || stat.value || stat.count || '';
         const m = /^([\d,\.]+)\s*(.*)$/.exec(String(numeral));
         const value = m ? m[1] : numeral;
         const suffix = m && m[2] ? m[2] : '';
-        return { value, suffix: suffix || s.suffix || '', label: s.label || s.title || s.name || '', iconSvgPath: s.iconSvgPath || s.icon || undefined };
+        const iconHtml = stat.iconHtml || stat.iconSvgPath || stat.icon || undefined;
+        const label = stat.label || stat.title || stat.name || '';
+        return { value, suffix: suffix || stat.suffix || '', label, iconHtml };
       });
       return { ...baseData, stats };
     }
 
     // SPLIT FEATURE
     if (normalizedType === 'splitFeature') {
-      const features = (baseData.features || baseData.cards || baseData.items || []).map((f) => ({
+      // Parse stringified features if needed
+      let featuresArray = baseData.features || baseData.cards || baseData.items || [];
+      if (featuresArray.length > 0 && typeof featuresArray[0] === 'string') {
+        featuresArray = featuresArray.map(f => {
+          try {
+            return typeof f === 'string' ? JSON.parse(f) : f;
+          } catch (e) {
+            return f;
+          }
+        });
+      }
+      
+      const features = featuresArray.map((f) => ({
         title: f.title || f.name || f.label || '',
         description: f.description || f.body || '',
-        iconSvgPath: f.iconSvgPath || f.icon || undefined
+        iconHtml: f.iconHtml || f.iconSvgPath || f.icon || undefined
       }));
       const image = baseData.image || (baseData.image_url ? { url: baseData.image_url, alt: baseData.image_alt || '' } : undefined);
       return {
         ...baseData,
-        heading: baseData.title || baseData.heading || baseData.subtitle || '',
+        heading: baseData.heading || baseData.title || baseData.subtitle || '',
         body: baseData.description || baseData.body || '',
         eyebrow: baseData.eyebrow || baseData.eyebrowText || '',
         features,
@@ -105,7 +146,7 @@ export default function SectionRenderer({ sections }) {
       }));
       return {
         ...baseData,
-        heading: baseData.title || baseData.heading || baseData.subtitle || '',
+        heading: baseData.heading || baseData.title || baseData.subtitle || '',
         body: baseData.description || baseData.body || '',
         eyebrow: baseData.eyebrow || '',
         cards
@@ -122,38 +163,43 @@ export default function SectionRenderer({ sections }) {
           description: src.description || src.body || p.description || p.body || '',
           stat: src.stat || p.stat || '',
           image: src.image || (src.image_url ? { url: src.image_url, alt: src.image_alt || '' } : p.image || (p.image_url ? { url: p.image_url, alt: p.image_alt || '' } : undefined)),
-          url: src.link_url || src.link || src.url || p.link_url || p.link || p.url || '#'
+          url: src.link_url || src.link || src.url || p.link_url || p.link || p.url || '#',
+          tags: src.tags || p.tags || []
         };
       });
       return {
         ...baseData,
-        heading: baseData.title || baseData.heading || baseData.subtitle || '',
+        heading: baseData.heading || baseData.title || baseData.subtitle || '',
         projects
       };
     }
 
     // INDUSTRIES GRID
     if (normalizedType === 'industriesGrid' || normalizedType === 'indGrid') {
-      // Data can be in items (from seed) or industries (from admin)
-      const itemsSrc = baseData.items || baseData.industries || baseData.cards || [];
+      // Data can be in industries (from admin/enriched) or items (from seed) or cards
+      const itemsSrc = baseData.industries || baseData.items || baseData.cards || [];
       const items = itemsSrc.map((i) => {
         const src = i?.data || i || {};
         return {
           ...src,
-          iconSvgPath: src.iconSvgPath || src.icon || i.icon || undefined,
+          iconHtml: src.iconHtml || src.iconSvgPath || src.icon || i.icon || undefined,
           name: src.name || src.title || i.name || i.title || ''
         };
       });
-      return { ...baseData, industries: items };
+      return {
+        ...baseData,
+        heading: baseData.heading || baseData.title || baseData.subtitle || '',
+        industries: items
+      };
     }
 
     // CERT TEASER
     if (normalizedType === 'certTeaser') {
       return {
         ...baseData,
-        heading: baseData.title || baseData.heading || '',
+        heading: baseData.heading || baseData.title || '',
         eyebrow: baseData.eyebrow || '',
-        body: baseData.subtitle || baseData.body || baseData.description || '',
+        body: baseData.body || baseData.subtitle || baseData.description || '',
         ctaLabel: baseData.ctaLabel || baseData.cta_label || baseData.cta || undefined,
         ctaUrl: baseData.ctaUrl || baseData.cta_url || baseData.cta_url || undefined
       };
@@ -161,8 +207,18 @@ export default function SectionRenderer({ sections }) {
 
     // TESTIMONIALS
     if (normalizedType === 'testimonials' || normalizedType === 'testimonial') {
-      const slides = baseData.slides || baseData.items || [];
-      return { ...baseData, items: slides };
+      // Prioritize items (admin data) over slides (legacy/default)
+      const slides = baseData.items || baseData.slides || [];
+      // Map 'person' field to 'name' for compatibility with component
+      const items = slides.map(s => ({
+        ...s,
+        name: s.name || s.person || undefined
+      }));
+      return {
+        ...baseData,
+        items,
+        heading: baseData.heading || baseData.title || ''
+      };
     }
 
     // PARTNERS
@@ -190,32 +246,63 @@ export default function SectionRenderer({ sections }) {
           logo: c.logo || (c.logo_url ? { url: c.logo_url } : undefined)
         }));
       }
-      return { ...baseData, logos, heading: baseData.title || baseData.heading || '', eyebrow: baseData.eyebrow || '' };
+      return { ...baseData, logos, heading: baseData.heading || baseData.title || '', eyebrow: baseData.eyebrow || '' };
     }
 
     // TIMELINE
     if (normalizedType === 'timeline') {
       return {
         ...baseData,
-        heading: baseData.title || baseData.heading || '',
-        body: baseData.description || baseData.body || '',
+        heading: baseData.heading || '',
+        body: baseData.body || '',
         eyebrow: baseData.eyebrow || '',
-        items: baseData.items || []
+        eyebrowColor: baseData.eyebrowColor || undefined,
+        eyebrowClassName: baseData.eyebrowClassName || '',
+        timelineYearColor: baseData.timelineYearColor || '#00D4FF',
+        alignment: baseData.alignment || 'center',
+        itemAlignment: baseData.itemAlignment || 'center',
+        items: baseData.items || [],
+        ctaLabel: baseData.ctaLabel || '',
+        ctaUrl: baseData.ctaUrl || ''
       };
     }
 
     // CTA BAND
     if (normalizedType === 'ctaBand') {
+      // Handle new array-based CTAs structure with fallback to old hardcoded fields
+      let ctas = [];
+      if (baseData.ctas && Array.isArray(baseData.ctas) && baseData.ctas.length > 0) {
+        // New array-based structure
+        ctas = baseData.ctas;
+      } else {
+        // Fallback to old hardcoded structure for backward compatibility
+        if (baseData.primaryCtaLabel || baseData.cta_primary?.label) {
+          ctas.push({
+            label: baseData.primaryCtaLabel || baseData.cta_primary?.label,
+            url: baseData.primaryCtaUrl || baseData.cta_primary?.url,
+            style: 'highlighted'
+          });
+        }
+        if (baseData.secondaryCtaLabel || baseData.cta_secondary?.label) {
+          ctas.push({
+            label: baseData.secondaryCtaLabel || baseData.cta_secondary?.label,
+            url: baseData.secondaryCtaUrl || baseData.cta_secondary?.url,
+            style: 'normal'
+          });
+        }
+        if (baseData.tertiaryCtaLabel || baseData.cta_tertiary?.label) {
+          ctas.push({
+            label: baseData.tertiaryCtaLabel || baseData.cta_tertiary?.label,
+            url: baseData.tertiaryCtaUrl || baseData.cta_tertiary?.url,
+            style: 'normal'
+          });
+        }
+      }
       return {
         ...baseData,
-        heading: baseData.title || baseData.heading || '',
-        body: baseData.subtitle || baseData.body || baseData.description || '',
-        primaryCtaLabel: baseData.cta_primary?.label || undefined,
-        primaryCtaUrl: baseData.cta_primary?.url || undefined,
-        secondaryCtaLabel: baseData.cta_secondary?.label || undefined,
-        secondaryCtaUrl: baseData.cta_secondary?.url || undefined,
-        tertiaryCtaLabel: baseData.cta_tertiary?.label || undefined,
-        tertiaryCtaUrl: baseData.cta_tertiary?.url || undefined
+        heading: baseData.heading || baseData.title || '',
+        body: baseData.body || baseData.subtitle || baseData.description || '',
+        ctas
       };
     }
 
@@ -234,7 +321,7 @@ export default function SectionRenderer({ sections }) {
           <Component
             key={section.id}
             data={data}
-            backgroundStyle={section.background_style}
+            backgroundStyle={data.backgroundStyle || section.backgroundStyle || section.background_style || 'light'}
           />
         );
       })}

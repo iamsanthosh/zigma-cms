@@ -16,7 +16,13 @@ const COOKIE_NAME = process.env.COOKIE_NAME || 'zigma_admin_session';
 export function middleware(req) {
   const { pathname } = req.nextUrl;
 
-  if (!pathname.startsWith('/admin') || pathname.startsWith('/admin/login')) {
+  // Allow public routes
+  if (!pathname.startsWith('/admin') && pathname !== '/admin/login') {
+    return NextResponse.next();
+  }
+
+  // Allow login page to be accessible
+  if (pathname === '/admin/login') {
     return NextResponse.next();
   }
 
@@ -37,5 +43,5 @@ export function middleware(req) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*']
+  matcher: ['/admin/:path*', '/login']
 };

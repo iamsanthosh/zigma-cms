@@ -5,6 +5,7 @@ import { visibleItems } from '@/lib/repeater';
 export default function Testimonials({ data }) {
   const items = visibleItems(data.items);
   const [active, setActive] = useState(0);
+  
   if (!items.length) return null;
 
   return (

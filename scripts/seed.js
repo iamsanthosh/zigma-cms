@@ -29,12 +29,20 @@ async function main() {
     );
   }
 
+  console.log('Seeding default theme...');
+  await conn.execute(
+    `INSERT INTO themes (id, name, slug, description, is_default, is_active) 
+     VALUES (1, 'Default Theme', 'default', 'Default Zigma CMS theme', 1, 1)
+     ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description)`,
+    []
+  );
+
   console.log('Seeding theme_settings...');
   for (const t of themeSettings) {
     await conn.execute(
-      `INSERT INTO theme_settings (\`key\`, \`value\`, category) VALUES (?, ?, ?)
+      `INSERT INTO theme_settings (theme_id, \`key\`, \`value\`, category) VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`), category = VALUES(category)`,
-      [t.key, t.value, t.category]
+      [1, t.key, t.value, t.category]
     );
   }
 
@@ -80,10 +88,12 @@ async function main() {
 
     let order = 0;
     for (const section of page.sections) {
+      // Extract only content fields, exclude metadata (id, type, slug, order)
+      const { id, type, slug, order: sectionOrder, ...contentData } = section.data || section;
       await conn.execute(
         `INSERT INTO sections (page_id, type, name, data, background_style, \`order\`, visible, active)
          VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
-        [pageRow.id, section.type, section.name, JSON.stringify(section.data), section.background_style, order++]
+        [pageRow.id, section.type, section.name, JSON.stringify(contentData), section.background_style, order++]
       );
     }
   }

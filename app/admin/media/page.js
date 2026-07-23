@@ -61,6 +61,22 @@ export default function MediaAdmin() {
     load();
   }
 
+  async function duplicateAsset(asset) {
+    // Create a copy of the media asset
+    try {
+      const fd = new FormData();
+      // Fetch the original file and re-upload it
+      const response = await fetch(asset.url);
+      const blob = await response.blob();
+      fd.append('file', new File([blob], `copy-${asset.alt_text || asset.filename || 'file'}`, { type: blob.type }));
+      fd.append('folder', asset.folder || 'library');
+      await fetch('/api/admin/upload', { method: 'POST', body: fd });
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to duplicate media');
+    }
+  }
+
   return (
     <div>
       <div className="admin-toolbar">
@@ -91,9 +107,14 @@ export default function MediaAdmin() {
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
               <span style={{ fontSize: '0.72rem', color: '#8FA3C2' }}>{asset.folder}</span>
-              <button className="admin-btn admin-btn-danger" onClick={() => removeAsset(asset)}>
-                Delete
-              </button>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                <button className="admin-btn admin-btn-ghost" onClick={() => duplicateAsset(asset)}>
+                  Duplicate
+                </button>
+                <button className="admin-btn admin-btn-danger" onClick={() => removeAsset(asset)}>
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         ))}

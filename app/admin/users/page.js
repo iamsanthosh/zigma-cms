@@ -53,6 +53,31 @@ export default function UsersAdmin() {
     load();
   }
 
+  async function remove(user) {
+    if (!confirm(`Delete "${user.name}"? This cannot be undone.`)) return;
+    await api(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+    load();
+  }
+
+  async function duplicate(user) {
+    if (!confirm(`Duplicate "${user.name}"? This will create a new user with the same role. You'll need to set a new password.`)) return;
+    try {
+      await fetch('/api/admin/users-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${user.name} (copy)`,
+          email: `${user.email}-copy`,
+          password: 'temp123',
+          role: user.role
+        })
+      });
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to duplicate user');
+    }
+  }
+
   return (
     <div>
       <div className="admin-toolbar">
@@ -97,20 +122,28 @@ export default function UsersAdmin() {
               <th>Email</th>
               <th>Role</th>
               <th>Status</th>
-              <th></th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.name}</td>
+                <td><strong>{u.name}</strong></td>
                 <td>{u.email}</td>
                 <td>{u.role}</td>
                 <td>{u.active ? 'Active' : 'Disabled'}</td>
                 <td>
-                  <button className="admin-btn admin-btn-ghost" onClick={() => toggle(u)}>
-                    {u.active ? 'Disable' : 'Enable'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    <button className="admin-btn admin-btn-ghost" onClick={() => duplicate(u)}>
+                      Duplicate
+                    </button>
+                    <button className="admin-btn admin-btn-ghost" onClick={() => toggle(u)}>
+                      {u.active ? 'Disable' : 'Enable'}
+                    </button>
+                    <button className="admin-btn admin-btn-danger" onClick={() => remove(u)}>
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

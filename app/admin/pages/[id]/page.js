@@ -2,6 +2,9 @@
 import { useEffect, useState, use } from 'react';
 import SectionList from '@/components/admin/SectionList';
 import SeoFields from '@/components/admin/SeoFields';
+import FloatingActionBar from '@/components/admin/FloatingActionBar';
+import PageThemeOverrides from '@/components/admin/PageThemeOverrides';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 async function api(url, options) {
   const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -23,16 +26,22 @@ export default function PageEditor({ params }) {
   const pageId = id;
   const [page, setPage] = useState(null);
   const [sections, setSections] = useState([]);
+  const [themes, setThemes] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [status, setStatus] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const router = useUnsavedChanges(hasUnsavedChanges);
 
   async function load() {
-    const [p, s] = await Promise.all([
+    const [p, s, t] = await Promise.all([
       api(`/api/admin/pages/${pageId}`),
-      api(`/api/admin/sections?page_id=${pageId}`)
+      api(`/api/admin/sections?page_id=${pageId}`),
+      api('/api/admin/themes')
     ]);
     setPage(p);
     setSections(s.sort((a, b) => a.order - b.order));
+    setThemes(t);
+    setHasUnsavedChanges(false);
   }
 
   useEffect(() => {
@@ -43,8 +52,24 @@ export default function PageEditor({ params }) {
   async function savePageFields(fields) {
     const updated = await api(`/api/admin/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(fields) });
     setPage(updated);
+    setHasUnsavedChanges(false);
     setStatus('Saved.');
     setTimeout(() => setStatus(''), 2000);
+  }
+
+  async function handleSave() {
+    const titleInput = document.querySelector('input[defaultvalue]');
+    const slugInput = document.querySelectorAll('input')[1];
+    const themeSelect = document.querySelector('select[name="theme_id"]');
+    
+    await savePageFields({
+      title: titleInput?.value || page.title,
+      slug: slugInput?.value || page.slug,
+      theme_id: themeSelect?.value ? parseInt(themeSelect.value) : null
+    });
+    if (window.saveAllSections) {
+      await window.saveAllSections();
+    }
   }
 
   async function publish() {
@@ -66,17 +91,16 @@ export default function PageEditor({ params }) {
 
   return (
     <div>
+      <FloatingActionBar
+        onSave={handleSave}
+        onPreview={preview}
+        onPublish={publish}
+        hasUnsavedChanges={hasUnsavedChanges}
+        status={status}
+      />
+
       <div className="admin-toolbar">
         <h1 className="admin-h1" style={{ marginBottom: 0 }}>{page.title}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {status && <span style={{ fontSize: '0.85rem', color: '#0C8A50' }}>{status}</span>}
-          <button className="admin-btn admin-btn-ghost" onClick={preview}>
-            Preview
-          </button>
-          <button className="admin-btn admin-btn-primary" onClick={publish}>
-            Publish
-          </button>
-        </div>
       </div>
 
       {previewUrl && (
@@ -89,20 +113,40 @@ export default function PageEditor({ params }) {
       )}
 
       <div className="admin-card">
-        <div className="admin-field">
-          <label>Page title</label>
-          <input defaultValue={page.title} onBlur={(e) => savePageFields({ title: e.target.value })} />
+        <div className="admin-grid-2">
+          <div className="admin-field">
+            <label>Page title</label>
+            <input defaultValue={page.title} onChange={() => setHasUnsavedChanges(true)} />
+          </div>
+          <div className="admin-field">
+            <label>Slug</label>
+            <input defaultValue={page.slug} onChange={() => setHasUnsavedChanges(true)} />
+          </div>
         </div>
         <div className="admin-field">
-          <label>Slug</label>
-          <input defaultValue={page.slug} onBlur={(e) => savePageFields({ slug: e.target.value })} />
+          <label>Theme (optional - overrides global theme)</label>
+          <select 
+            name="theme_id" 
+            defaultValue={page.theme_id || ''}
+            onChange={() => setHasUnsavedChanges(true)}
+          >
+            <option value="">Use Global Theme</option>
+            {themes.map((theme) => (
+              <option key={theme.id} value={theme.id}>
+                {theme.name} {theme.is_default ? '(Default)' : ''}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <SeoFields entitySeoId={page.seo_id} onSeoIdChange={(seoId) => savePageFields({ seo_id: seoId })} />
+      <SeoFields entitySeoId={page.seo_id} onSeoIdChange={(seoId) => { setHasUnsavedChanges(true); }} />
+
+      <h2 style={{ margin: '1.5rem 0 1rem', fontFamily: 'var(--font-display)' }}>Theme Overrides</h2>
+      <PageThemeOverrides pageId={Number(pageId)} />
 
       <h2 style={{ margin: '1.5rem 0 1rem', fontFamily: 'var(--font-display)' }}>Sections</h2>
-      <SectionList pageId={Number(pageId)} initialSections={sections} />
+      <SectionList pageId={Number(pageId)} initialSections={sections} onHasUnsavedChanges={setHasUnsavedChanges} />
     </div>
   );
 }

@@ -1,11 +1,35 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
 import { visibleItems } from '@/lib/repeater';
 
 /** Reused for Generate / Protect / Maintain / Experts / Engineering-Design —
  * every one of these is a `split-layout` band with a 4-card feature grid,
  * exactly matching the real template's markup and classes. */
 export default function SplitFeature({ data, backgroundStyle }) {
+  const sectionRef = useRef(null);
   const imageRight = data.imagePosition !== 'left';
   const features = visibleItems(data.features);
+
+  useEffect(() => {
+    const elements = sectionRef.current?.querySelectorAll('.reveal');
+    if (!elements) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
 
   const mediaBlock = (
     <div className="split-img-wrap reveal">
@@ -34,12 +58,8 @@ export default function SplitFeature({ data, backgroundStyle }) {
         <div className="split-feat-grid">
           {features.map((f, i) => (
             <div className="feat-card" key={i}>
-              {f.iconSvgPath && (
-                <div className="feat-icon-wrap">
-                  <svg className="feat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                    <path d={f.iconSvgPath} />
-                  </svg>
-                </div>
+              {f.iconHtml && (
+                <div className="feat-icon-wrap" dangerouslySetInnerHTML={{ __html: f.iconHtml }} />
               )}
               <h5>{f.title}</h5>
               <p>{f.description}</p>
@@ -56,7 +76,7 @@ export default function SplitFeature({ data, backgroundStyle }) {
   );
 
   return (
-    <section className={`section section-${backgroundStyle || 'light'}`}>
+    <section ref={sectionRef} className={`section section-${backgroundStyle || 'light'}`}>
       <div className="container">
         <div className={`split-layout ${imageRight ? 'img-right' : 'img-left'}`}>
           {imageRight ? (

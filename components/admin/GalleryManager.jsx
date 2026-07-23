@@ -73,7 +73,7 @@ export default function GalleryManager({ itemType, itemId }) {
   return (
     <div className="admin-card">
       <h3 style={{ marginBottom: '0.75rem' }}>Gallery (modal images &amp; videos)</h3>
-      <p style={{ fontSize: '0.8rem', color: '#8FA3C2', marginBottom: '1rem' }}>
+      <p style={{ fontSize: '0.8rem', color: 'var(--admin-text-muted)', marginBottom: '1rem' }}>
         Everything added here appears in the tile-click popup. Mark one as &ldquo;Background&rdquo; to use it as the
         modal&apos;s hero image/video; the rest render as a scrollable gallery beneath the description.
       </p>

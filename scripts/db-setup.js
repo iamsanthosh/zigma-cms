@@ -64,6 +64,36 @@ async function runMigration() {
   await log('Schema migration completed');
 }
 
+async function runThemeMigration() {
+  const sqlPath = path.join(__dirname, '..', 'schema-theme-migration.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+
+  const conn = await mysql.createConnection({
+    ...dbConfig,
+    database: process.env.DB_NAME,
+    multipleStatements: true
+  });
+
+  await conn.query(sql);
+  await conn.end();
+  await log('Theme migration completed');
+}
+
+async function runEnhancedThemeMigration() {
+  const sqlPath = path.join(__dirname, '..', 'schema-theme-migration-v2.sql');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+
+  const conn = await mysql.createConnection({
+    ...dbConfig,
+    database: process.env.DB_NAME,
+    multipleStatements: true
+  });
+
+  await conn.query(sql);
+  await conn.end();
+  await log('Enhanced theme migration completed');
+}
+
 async function createAdminUser() {
   const adminName = process.env.ADMIN_NAME;
   const adminEmail = process.env.ADMIN_EMAIL;
@@ -244,9 +274,23 @@ async function insertMenuItemRecursive(conn, menuId, item, parentId) {
   }
 }
 
-async function getPageIdBySlug(conn, slug) {
-  const [[row]] = await conn.query(`SELECT id FROM pages WHERE slug = ?`, [slug]);
-  return row?.id;
+async function runEnhancedThemeSeed() {
+  const { spawn } = require('child_process');
+  
+  return new Promise((resolve, reject) => {
+    const seedProcess = spawn('node', [path.join(__dirname, 'seed-enhanced-theme.js')], {
+      stdio: 'inherit',
+      shell: true
+    });
+
+    seedProcess.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Enhanced theme seed failed with code ${code}`));
+      }
+    });
+  });
 }
 
 async function main() {
@@ -264,6 +308,19 @@ async function main() {
     await runMigration();
     await createAdminUser();
     await runSeed();
+    // Run enhanced theme migration (creates tables needed by seed-enhanced-theme.js)
+    const { spawn } = require('child_process');
+    await new Promise((resolve, reject) => {
+      const migrateProcess = spawn('node', [path.join(__dirname, 'migrate-enhanced-theme.js')], {
+        stdio: 'inherit',
+        shell: true
+      });
+      migrateProcess.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Enhanced theme migration failed with code ${code}`));
+      });
+    });
+    await runEnhancedThemeSeed();
 
     console.log('\n✨ Database setup complete!\n');
     console.log('🔐 Admin credentials:');
